@@ -676,7 +676,7 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
         match sprite_bytes() {
             Some(b) => {
                 let h = Header::from_bytes("Content-Type", "image/webp").unwrap();
-                let _ = req.respond(Response::from_data(b.clone()).with_header(h));
+                let _ = req.respond(Response::from_data(b.to_vec()).with_header(h));
             }
             None => {
                 let _ = req.respond(Response::from_string("sprite not found").with_status_code(404));
@@ -707,16 +707,28 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
     json_response(req, code, resp);
 }
 
+// 宠物雪碧图（1536x1872，8列x9行，cell 192x208）。
+// 【2026-09-10 加固】原先只在运行时读 dsh-pet 插件目录，一旦卸载/升级 dsh-pet 或改动
+// web profile，宠物立即 404。现改为编译期 include_bytes! 内嵌，外部依赖彻底消除。
+// 若仍想「不重编译就换素材」：把新图放到下面的外部覆盖路径，重启应用即生效；
+// 该文件不存在或读取失败时，自动回落到内嵌素材，永不报错。
+static SPRITE_EMBEDDED: &[u8] = include_bytes!("../assets/spritesheet.webp");
 static SPRITE: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
-fn sprite_bytes() -> Option<&'static Vec<u8>> {
-    let _ = SPRITE.get_or_init(|| {
-        std::fs::read(home_dir()
-            .join(".dsh")
-            .join("profiles/web/node_modules/@linxin666/dsh-pet/assets/whale-refined/spritesheet.webp"))
-        .unwrap_or_default()
+fn sprite_bytes() -> Option<&'static [u8]> {
+    let v = SPRITE.get_or_init(|| {
+        let external = home_dir().join(".dsh").join("profiles/web/node_modules")
+            .join("@linxin666/dsh-pet/assets/whale-refined/spritesheet.webp");
+        match std::fs::read(&external) {
+            Ok(b) if !b.is_empty() => b,
+            _ => SPRITE_EMBEDDED.to_vec(),
+        }
     });
-    SPRITE.get().filter(|v| !v.is_empty())
+    if v.is_empty() {
+        None
+    } else {
+        Some(v.as_slice())
+    }
 }
 
 static APP: std::sync::OnceLock<Mutex<Option<tauri::AppHandle>>> = std::sync::OnceLock::new();
