@@ -1,16 +1,47 @@
 {
   "_说明": "鲸鱼娘行为配置。改这里就能换动作/台词/节奏，改完让应用重启即生效，无需重新编译。",
-  "_触发器说明": "track 必须是 pet.json 里 sprite2d.tracks 的键名；once=true 表示播一遍就回到常态，false/省略表示持续循环到条件解除。",
+  "_触发器说明": "track 必须是 pet.json 里 sprite2d.tracks 的键名（可选：idle / running-right / running-left / waving / jumping / failed / waiting / running / review）。once=true 表示播一遍就回到常态，false/省略表示持续循环到条件解除。",
+  "_互动说明": "左键三条通道：① click.tracks = 动作轮换池，每次随机挑一个、且不与最近 avoidRepeat 次重复；② clickCombo = 短时间内连点满 every 次升级演一次（被戳烦了）；③ hold = 按住不动满 holdMs 毫秒即摸头。",
+  "_台词说明": "cfg.quips[轨道名] 是该动作的专属台词（随机、不连说两句）；缺省时回落到 cfg.quip / 通用 quips。",
+
   "triggers": {
-    "hover":        { "track": "waiting" },
-    "click":        { "track": "jumping", "once": true, "quip": true },
-    "doubleClick":  { "track": "waving",  "once": true, "bubble": "收到～工作台见！" },
-    "dragLeft":     { "track": "running-left" },
-    "dragRight":    { "track": "running-right" },
+    "hover": { "track": "waiting" },
+
+    "click": {
+      "tracks": ["waving", "jumping", "review", "running"],
+      "once": true,
+      "avoidRepeat": 2,
+      "quips": {
+        "waving": ["嗨～我在这儿！", "招手招手～", "看到啦看到啦", "在这儿呢～"],
+        "jumping": ["咚——跳一下！", "跃跃欲试！", "蹦！", "飞一个给你看"],
+        "review": ["让我看看…", "嗯……若有所思", "上下打量你一下", "今天气色不错嘛"],
+        "running": ["原地小跑热身～", "呼哧呼哧——", "跑起来啦！", "绕着自己转一圈"]
+      }
+    },
+
+    "clickCombo": {
+      "every": 4,
+      "windowMs": 2500,
+      "track": "failed",
+      "once": true,
+      "quips": ["别戳啦，头晕了…", "呜……再戳就要生气了", "够啦够啦，停下来！", "我又不是按钮…"]
+    },
+
+    "hold": {
+      "holdMs": 800,
+      "track": "review",
+      "once": true,
+      "quips": ["呼～舒服…", "被摸头了，很开心", "再摸一会儿嘛～", "啊…这里最舒服"]
+    },
+
+    "doubleClick": { "track": "waving", "once": true, "bubble": "收到～工作台见！" },
+    "dragLeft": { "track": "running-left" },
+    "dragRight": { "track": "running-right" },
     "agentWorking": { "track": "running" },
     "taskFinished": { "track": "review", "once": true, "bubble": "任务完成，复盘一下～" },
-    "usageAlert":   { "track": "failed", "once": true }
+    "usageAlert": { "track": "failed", "once": true }
   },
+
   "params": {
     "usageAlertThreshold": 90,
     "usageAlertEveryIdleCycles": 6,
@@ -18,6 +49,7 @@
     "taskPollMs": 10000,
     "statusPollMs": 60000
   },
+
   "quips": [
     "咚——跳一下！", "氧气充满，继续潜～", "主人在叫我吗？", "咕噜咕噜～",
     "跃跃欲试！", "别担心，有我在～", "噗通噗通，心跳加速", "今天也要加油～",

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- pet-ver: 2026-09-10-1605-interact-pool -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -119,6 +120,57 @@
   function trig(key) {
     var t = trigCfg(key);
     return (typeof t.track === 'string' && hasTrack(t.track)) ? t.track : '';
+  }
+
+  /* ============ 互动变化：台词池 / 点击轮换池 / 连点升级 ============ */
+  /* 台词：优先用"动作专属台词"（cfg.quips[轨道名]），没有才回落到通用台词。
+     同一个句子不连着说两遍。 */
+  var lastQuip = '';
+  function pickQuip(list, fallback) {
+    var arr = (Array.isArray(list) ? list : []).filter(function (s) {
+      return typeof s === 'string' && s;
+    });
+    if (!arr.length) return (typeof fallback === 'string' && fallback) ? fallback : '';
+    if (arr.length === 1) { lastQuip = arr[0]; return arr[0]; }
+    var pick = arr[Math.floor(Math.random() * arr.length)];
+    if (pick === lastQuip) pick = arr[(arr.indexOf(pick) + 1) % arr.length];
+    lastQuip = pick;
+    return pick;
+  }
+
+  /* 左键轮换池：click.tracks 是候选动作数组，随机挑一个，
+     且不与最近 avoidRepeat 次重复（默认 2）——避免连着出同一个动作。
+     兼容旧写法 click.track（单值 = 只有一项的池）。 */
+  var clickHist = [];
+  function pickClickTrack() {
+    var cfg = trigCfg('click');
+    var pool = [];
+    if (Array.isArray(cfg.tracks)) pool = cfg.tracks.filter(hasTrack);
+    if (!pool.length) { var single = trig('click'); if (single) pool = [single]; }
+    if (!pool.length) return '';
+    if (pool.length === 1) return pool[0];
+    var avoid = Math.max(0, Math.min(num(cfg.avoidRepeat, 2), pool.length - 1));
+    var cand = pool.filter(function (n) { return clickHist.indexOf(n) < 0; });
+    if (!cand.length) cand = pool.slice();
+    var pick = cand[Math.floor(Math.random() * cand.length)];
+    clickHist.push(pick);
+    if (avoid <= 0) clickHist = [];
+    else while (clickHist.length > avoid) clickHist.shift();
+    return pick;
+  }
+
+  /* 连点升级：windowMs 内累计点满 every 次 → 返回 true（演"被戳烦了"）。
+     触发后计数清零，避免后面每一下都演。 */
+  var comboCount = 0, comboTimer = null;
+  function comboFired() {
+    var cfg = trigCfg('clickCombo');
+    var every = num(cfg.every, 0);
+    if (every <= 0 || !hasTrack(cfg.track)) return false;
+    comboCount++;
+    clearTimeout(comboTimer);
+    comboTimer = setTimeout(function () { comboCount = 0; }, num(cfg.windowMs, 2500));
+    if (comboCount >= every) { comboCount = 0; clearTimeout(comboTimer); return true; }
+    return false;
   }
 
   function startTrack(name, once) {
@@ -317,10 +369,26 @@
   cv.addEventListener('mouseleave', function () { hover = false; refreshAmbient(); });
 
   var dragging = null;
+  var holdTimer = null, holdFired = false;
   cv.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return;
     dragging = { x: e.clientX, y: e.clientY, moved: false };
     lastScreenX = null;
+    holdFired = false;
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    /* 按住不动满 holdMs → 摸头（区别于单击：单击是松手时的短按） */
+    var hc = trigCfg('hold');
+    var hms = num(hc.holdMs, 800);
+    if (hasTrack(hc.track) && hms > 0) {
+      holdTimer = setTimeout(function () {
+        holdTimer = null;
+        if (!dragging || dragging.moved) return;      // 已经变成拖拽了，不算摸头
+        holdFired = true;
+        startTrack(hc.track, hc.once !== false);
+        var q = pickQuip(hc.quips, hc.quip);
+        if (q) showBubble(q);
+      }, hms);
+    }
   });
   window.addEventListener('mousemove', function (e) {
     if (!dragging) return;
@@ -328,6 +396,7 @@
       var dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
       if (Math.sqrt(dx * dx + dy * dy) <= 4) return;
       dragging.moved = true;
+      if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }   // 变成拖拽 → 取消摸头
       fetch('/api/pet/drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
     }
     /* 窗口跟着光标跑，clientX 几乎不变 → 用屏幕坐标差判断拖动方向 */
@@ -340,13 +409,28 @@
     if (want && want !== cur) { oneShot = false; queue = []; startTrack(want, false); }
   });
   window.addEventListener('mouseup', function (e) {
-    var wasClick = !!(dragging && !dragging.moved && e.button === 0);
+    var st = dragging;
     dragging = null; lastScreenX = null; dragDir = '';
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    var wasClick = !!(st && !st.moved && e.button === 0);
+    if (holdFired) {                       // 摸头结束：松手就回常态
+      holdFired = false;
+      if (wasClick) { toRest(); return; }
+    }
     if (wasClick) {
+      if (comboFired()) {                  // 连点升级：被戳烦了
+        var cc = trigCfg('clickCombo');
+        startTrack(cc.track, cc.once !== false);
+        var cq = pickQuip(cc.quips, cc.quip);
+        if (cq) showBubble(cq);
+        return;
+      }
       var cfg = trigCfg('click');
-      var n = trig('click');
+      var n = pickClickTrack();            // 轮换池：每次点不一定同一个动作
       if (n) startTrack(n, !!cfg.once);
-      if (cfg.quip) quip();
+      var q = pickQuip(cfg.quips && cfg.quips[n], '');
+      if (q) showBubble(q);
+      else if (cfg.quip) quip();
       else if (cfg.bubble) showBubble(cfg.bubble);
     }
     if (!oneShot) toRest();
@@ -366,6 +450,26 @@
     fetch('/api/menu/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .catch(function () { });
   });
+
+  /* ============ 页面自热重载 ============
+     页面是运行时从磁盘读的（no-store），所以改完 public/pet.html 不必重启应用。
+     做法：启动时抓一份本文内容作基线，之后每 30s 比一次；内容变了就自己刷新。
+     首轮只记基线、不比较（避免刚加载就误判成刷新）。 */
+  var liveSig = null, reloading = false;
+  function checkReload(isBaseline) {
+    if (reloading) return;
+    fetch('/pet.html', { cache: 'no-store' })
+      .then(function (r) { return (r && typeof r.text === 'function') ? r.text() : ''; })
+      .then(function (h) {
+        if (typeof h !== 'string' || !h) return;
+        var sig = h.length + '|' + h.slice(0, 160) + '|' + h.slice(-160);
+        if (isBaseline || liveSig === null) { liveSig = sig; return; }
+        if (sig !== liveSig) { reloading = true; location.reload(); }
+      })
+      .catch(function () { });
+  }
+  checkReload(true);
+  setInterval(function () { checkReload(false); }, 30000);
 
   /* ============ 启动 ============ */
   img.onload = function () { draw(); requestAnimationFrame(tick); };

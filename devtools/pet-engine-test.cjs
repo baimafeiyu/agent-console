@@ -20,6 +20,7 @@ const ROW = {
   0: 'idle', 1: 'running-right', 2: 'running-left', 3: 'waving', 4: 'jumping',
   5: 'failed', 6: 'waiting', 7: 'running', 8: 'review'
 };
+const BEH = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'pet-behavior.json'), 'utf8'));
 
 /* ---------------- 虚拟时钟 + 定时器 ---------------- */
 let now = 0;
@@ -150,14 +151,66 @@ function frameAdvanced() {
   await advance(400);
   check('移开回到 idle', currentName() === 'idle', currentName());
 
-  console.log('\n== 3. 单击 → jumping（row 4）播一遍后回落 ==');
+  console.log('\n== 3. 左键 → 动作轮换池（不再只跳一下）==');
+  const CLICK_POOL = BEH.triggers.click.tracks;
+  const clickTracks = [], clickQuips = [];
+  for (let i = 0; i < 12; i++) {
+    els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+    winHandlers.mouseup({ button: 0 });
+    await advance(120);
+    clickTracks.push(currentName());
+    clickQuips.push((els.status.innerHTML.match(/s-msg">([^<]*)</) || [])[1] || '');
+    await advance(4200);                  // 等这次播完（且超过连击窗口，避免叠加连击）
+  }
+  const uniqClick = [...new Set(clickTracks)];
+  check('点击出现多种动作（≥3 种）', uniqClick.length >= 3, uniqClick.join(', '));
+  check('点击动作全部来自配置的轮换池', clickTracks.every(n => CLICK_POOL.indexOf(n) >= 0), clickTracks.join(', '));
+  let adjSame = 0;
+  for (let i = 1; i < clickTracks.length; i++) if (clickTracks[i] === clickTracks[i - 1]) adjSame++;
+  check('相邻两次不重复（avoidRepeat）', adjSame === 0, '重复了 ' + adjSame + ' 次');
+  const uniqQuip = [...new Set(clickQuips.filter(Boolean))];
+  check('台词随动作变化（≥3 种不同）', uniqQuip.length >= 3, uniqQuip.join(' / '));
+  const quipOK = clickTracks.every((n, i) => {
+    const q = clickQuips[i];
+    if (!q) return true;                 // 允许某次只做动作不说台词
+    const own = (BEH.triggers.click.quips || {})[n] || [];
+    return own.indexOf(q) >= 0 || BEH.quips.indexOf(q) >= 0;
+  });
+  check('每次台词都属于该动作的专属台词池', quipOK);
+  await advance(4500);
+  check('点击动作播完回落常态', currentName() === 'idle', currentName());
+
+  console.log('\n== 3b. 连点 4 次 → failed（被戳烦了）==');
+  for (let i = 0; i < 3; i++) {
+    els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+    winHandlers.mouseup({ button: 0 });
+    await advance(100);
+  }
+  check('连点到第 3 下还没升级', currentName() !== 'failed', currentName());
   els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
   winHandlers.mouseup({ button: 0 });
-  await advance(200);
-  const clickName = currentName();
-  check('单击触发 jumping 或 quip 气泡', clickName === 'jumping' || /咚|氧气|主人|咕噜|跃跃|别担心|噗通|今天|被摸头|再戳/.test(els.status.innerHTML), clickName + ' / ' + els.status.innerHTML.slice(0, 40));
-  await advance(4000);
-  check('jumping 播完自动回落常态', currentName() === 'idle', currentName());
+  await advance(120);
+  check('第 4 连点升级为 failed', currentName() === 'failed', currentName());
+  check('台词出自"被戳烦"那一组', /别戳|再戳|够啦|不是按钮/.test(els.status.innerHTML), els.status.innerHTML.slice(0, 40));
+  await advance(6000);
+  check('failed 播完回落常态', currentName() === 'idle', currentName());
+  els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+  winHandlers.mouseup({ button: 0 });
+  await advance(120);
+  check('升级后计数清零（下一击回到轮换池）', CLICK_POOL.indexOf(currentName()) >= 0, currentName());
+  await advance(4500);
+
+  console.log('\n== 3c. 长按 800ms → 摸头（review）==');
+  els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+  await advance(500);
+  check('按住 500ms 尚未触发摸头', currentName() !== 'review', currentName());
+  await advance(400);                     // 累计 900ms > holdMs 800
+  check('长按满 800ms 触发摸头（review）', currentName() === 'review', currentName());
+  check('摸头台词出现', /摸头|舒服|再摸/.test(els.status.innerHTML), els.status.innerHTML.slice(0, 40));
+  winHandlers.mouseup({ button: 0 });
+  await advance(250);
+  check('松手即回常态（不再停留在 review）', currentName() !== 'review', currentName());
+  await advance(1000);
 
   console.log('\n== 4. 有任务在进行 → running（row 7）==');
   FAKE_DOING = 2;
