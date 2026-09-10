@@ -1,0 +1,26 @@
+{
+  "_说明": "鲸鱼娘行为配置。改这里就能换动作/台词/节奏，改完让应用重启即生效，无需重新编译。",
+  "_触发器说明": "track 必须是 pet.json 里 sprite2d.tracks 的键名；once=true 表示播一遍就回到常态，false/省略表示持续循环到条件解除。",
+  "triggers": {
+    "hover":        { "track": "waiting" },
+    "click":        { "track": "jumping", "once": true, "quip": true },
+    "doubleClick":  { "track": "waving",  "once": true, "bubble": "收到～工作台见！" },
+    "dragLeft":     { "track": "running-left" },
+    "dragRight":    { "track": "running-right" },
+    "agentWorking": { "track": "running" },
+    "taskFinished": { "track": "review", "once": true, "bubble": "任务完成，复盘一下～" },
+    "usageAlert":   { "track": "failed", "once": true }
+  },
+  "params": {
+    "usageAlertThreshold": 90,
+    "usageAlertEveryIdleCycles": 6,
+    "wanderEveryIdleCycles": 9,
+    "taskPollMs": 10000,
+    "statusPollMs": 60000
+  },
+  "quips": [
+    "咚——跳一下！", "氧气充满，继续潜～", "主人在叫我吗？", "咕噜咕噜～",
+    "跃跃欲试！", "别担心，有我在～", "噗通噗通，心跳加速", "今天也要加油～",
+    "被摸头了，很开心", "再戳一下试试呀"
+  ]
+}

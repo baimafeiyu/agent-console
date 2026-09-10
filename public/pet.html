@@ -46,29 +46,6 @@
 (function () {
   'use strict';
   var CELL_W = 192, CELL_H = 208;
-  /* 雪碧图 1536x1872 = 8 列 x 9 行，行序 = pet.json tracks 键序：
-     0 idle / 1 run-right / 2 run-left / 3 waving / 4 jumping /
-     5 failed / 6 waiting / 7 running / 8 review */
-  var TRACKS = {
-    idle:    { row: 0, frames: 6, durations: [500, 500, 600, 500, 500, 600], loop: true },
-    waiting: { row: 6, frames: 6, durations: [550, 550, 600, 550, 550, 600], loop: true },
-    waving:  { row: 3, frames: 4, durations: [450, 450, 450, 450], loop: false },
-    jumping: { row: 4, frames: 5, durations: [400, 400, 400, 450, 450], loop: false },
-    failed:  { row: 5, frames: 8, durations: [550, 550, 550, 600, 650, 700, 550, 550], loop: false }
-  };
-  var QUIPS = [
-    '咚——跳一下！', '氧气充满，继续潜～', '主人在叫我吗？', '咕噜咕噜～',
-    '跃跃欲试！', '别担心，有我在～', '噗通噗通，心跳加速', '今天也要加油～',
-    '被摸头了，很开心', '再戳一下试试呀'
-  ];
-  var quipIdx = 0;
-
-  var img = new Image();
-  img.src = '/pet-sprite.webp';
-  var cv = document.getElementById('pet');
-  var ctx = cv.getContext('2d');
-  var track = 'idle', idx = 0, elapsed = 0, last = performance.now();
-  var idleCycles = 0, hover = false, monthlyPercent = 0;
 
   var T = window.__TAURI__ || null;
   function win(label) {
@@ -79,50 +56,148 @@
     return null;
   }
 
-  function setTrack(name, force) {
-    if (!force && track === name) return;
-    if (!TRACKS[name]) return;
-    track = name; idx = 0; elapsed = 0;
+  /* ============ 契约默认值（清单读不到时的兜底，保证宠物永远能动） ============ */
+  /* 行序固定：0 idle / 1 running-right / 2 running-left / 3 waving / 4 jumping /
+     5 failed / 6 waiting / 7 running / 8 review */
+  var CONTRACT_ORDER = ['idle', 'running-right', 'running-left', 'waving', 'jumping',
+    'failed', 'waiting', 'running', 'review'];
+  var DEFAULT_FRAMES = [6, 8, 8, 4, 5, 8, 6, 6, 6];
+  var CONTRACT_MS = {
+    'idle': [500, 500, 600, 500, 500, 600],
+    'running-right': [300, 300, 300, 300, 300, 300, 300, 400],
+    'running-left': [300, 300, 300, 300, 300, 300, 300, 400],
+    'waving': [450, 450, 450, 450],
+    'jumping': [400, 400, 400, 450, 450],
+    'failed': [550, 550, 550, 600, 650, 700, 550, 550],
+    'waiting': [550, 550, 600, 550, 550, 600],
+    'running': [330, 330, 330, 330, 330, 400],
+    'review': [650, 650, 650, 650, 650, 650]
+  };
+
+  /* ============ 把 pet.json 清单编成轨道表 ============ */
+  /* 行号 = 该轨道在 sprite2d.tracks 里的键序（dsh-pet 约定）；
+     也可用 tracks.<名>.row 显式指定，避免调序时行号错位。 */
+  function buildTracks(manifest) {
+    var s = manifest && manifest.sprite2d;
+    var frames = (s && Array.isArray(s.frames) && s.frames.length) ? s.frames.slice() : DEFAULT_FRAMES.slice();
+    var defs = (s && s.tracks && typeof s.tracks === 'object') ? s.tracks : null;
+    var names = defs ? Object.keys(defs) : CONTRACT_ORDER.slice();
+    var out = {};
+    names.forEach(function (n, i) {
+      var d = (defs && defs[n]) || {};
+      var row = (typeof d.row === 'number') ? d.row : i;
+      var fn = (typeof frames[row] === 'number') ? frames[row] : (DEFAULT_FRAMES[row] || 6);
+      if (fn <= 0) return;                                   // 该行标记为未使用
+      var durs = (Array.isArray(d.durations) && d.durations.length)
+        ? d.durations.slice(0, fn) : (CONTRACT_MS[n] || []).slice(0, fn);
+      while (durs.length < fn) durs.push(durs.length ? durs[durs.length - 1] : 300);
+      var loop = (typeof d.loop === 'boolean') ? d.loop : (n !== 'jumping' && n !== 'failed');
+      out[n] = { row: row, frames: fn, durations: durs, loop: loop };
+    });
+    return Object.keys(out).length ? out : null;
   }
 
+  /* ============ 运行态 ============ */
+  var TRACKS = buildTracks(null);      // 先用契约默认起步
+  var BH = null, PARAMS = {};
+  var QUIPS = ['咚——跳一下！', '氧气充满，继续潜～', '主人在叫我吗？', '咕噜咕噜～'];
+  var quipIdx = 0;
+
+  var cur = '', idx = 0, elapsed = 0, last = performance.now();
+  var oneShot = false, queue = [];
+  var ambientCycles = 0, hover = false;
+  var dragDir = '', lastScreenX = null, dragDx = 0;
+  var doingCount = 0, usagePct = null;
+
+  function num(v, d) { return (typeof v === 'number' && isFinite(v)) ? v : d; }
+  function param(k, d) { return num(PARAMS[k], d); }
+  function hasTrack(n) { return !!(n && TRACKS[n]); }
+  function trigCfg(key) {
+    var t = BH && BH.triggers && BH.triggers[key];
+    return (t && typeof t === 'object') ? t : {};
+  }
+  function trig(key) {
+    var t = trigCfg(key);
+    return (typeof t.track === 'string' && hasTrack(t.track)) ? t.track : '';
+  }
+
+  function startTrack(name, once) {
+    if (!hasTrack(name)) name = hasTrack('idle') ? 'idle' : Object.keys(TRACKS)[0];
+    if (!name) return;
+    cur = name; oneShot = !!once; idx = 0; elapsed = 0;
+  }
+
+  /* 常态该播什么：拖拽中 > 有任务在跑 > 悬停 > 待机 */
+  function restTrack() {
+    if (dragDir) {
+      var d = trig(dragDir === 'left' ? 'dragLeft' : 'dragRight');
+      if (d) return d;
+    }
+    var w = trig('agentWorking');
+    if (w && doingCount > 0) return w;
+    var h = trig('hover');
+    if (h && hover) return h;
+    return hasTrack('idle') ? 'idle' : Object.keys(TRACKS)[0];
+  }
+  function toRest() { oneShot = false; startTrack(restTrack(), false); }
+  function refreshAmbient() {                // 环境态变了就切；正在播一次性动作时不动
+    if (oneShot) return;
+    var r = restTrack();
+    if (r && r !== cur) startTrack(r, false);
+  }
+
+  /* 一次动作播完 / 环境态循环一圈结束时调用 */
+  function onTrackEnd() {
+    if (queue.length) { startTrack(queue.shift(), true); return; }
+    if (oneShot) { oneShot = false; startTrack(restTrack(), false); return; }
+    /* 环境态每跑完一圈算一拍（不限于 idle）——
+       否则只要一直有任务在进行（agentWorking 常驻），溜达/告警就永远轮不到 */
+    ambientCycles++;
+    var thr = param('usageAlertThreshold', 90);
+    var alertEvery = param('usageAlertEveryIdleCycles', 6);
+    var alert = trig('usageAlert');
+    if (alert && usagePct !== null && usagePct >= thr && alertEvery > 0 && ambientCycles % alertEvery === 0) {
+      startTrack(alert, true); return;
+    }
+    var wanderEvery = param('wanderEveryIdleCycles', 9);
+    var a = trig('dragRight'), b = trig('dragLeft');
+    if (a && b && wanderEvery > 0 && ambientCycles % wanderEvery === 0) {
+      queue = [b]; startTrack(a, true); return;   // 先向右溜达一小段，再向左
+    }
+    var nr = restTrack();
+    if (nr && nr !== cur) startTrack(nr, false);
+    else { idx = 0; elapsed = 0; }
+  }
+
+  /* ============ 绘制 ============ */
+  var img = new Image();
+  img.src = '/pet-sprite.webp';
+  var cv = document.getElementById('pet');
+  var ctx = cv.getContext('2d');
+
   function draw() {
-    var t = TRACKS[track];
+    var t = TRACKS[cur];
     ctx.clearRect(0, 0, CELL_W, CELL_H);
-    if (img.complete && img.naturalWidth) {
+    if (t && img.complete && img.naturalWidth) {
       ctx.drawImage(img, idx * CELL_W, t.row * CELL_H, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
     }
   }
 
   function tick() {
     var now = performance.now();
-    var delta = now - last;
+    elapsed += now - last;
     last = now;
-    elapsed += delta;
-    var t = TRACKS[track];
-    if (elapsed >= (t.durations[idx] || 300)) {
+    var t = TRACKS[cur];
+    if (t && elapsed >= (t.durations[idx] || 300)) {
       elapsed = 0;
       idx++;
-      if (idx >= t.frames) {
-        if (track === 'idle') {
-          idleCycles++;
-          idx = 0;
-          if (hover) setTrack('waiting', true);
-          else if (idleCycles % 4 === 3) setTrack('waving', true);
-          else if (monthlyPercent >= 90 && idleCycles % 6 === 5) setTrack('failed', true);
-        } else if (t.loop) {
-          idx = 0;
-        } else {
-          setTrack('idle', true);
-        }
-      }
+      if (idx >= t.frames) { idx = 0; onTrackEnd(); }
     }
     draw();
     requestAnimationFrame(tick);
   }
-  img.onload = function () { draw(); requestAnimationFrame(tick); };
-  draw();
 
-  /* ---------------- 头顶常驻气泡 ---------------- */
+  /* ============ 头顶常驻气泡 ============ */
   var statusEl = document.getElementById('status');
   var SD = { goMonth: null, goRoll: null, goWeek: null, ds: null, dsAvail: null };
   var msgToken = 0, msgTimer = null;
@@ -136,7 +211,7 @@
   function dsClass(v) { return v === null ? ' dim' : (v < 5 ? ' hot' : (v < 20 ? ' warn' : '')); }
 
   function applyStatus() {
-    if (statusEl.classList.contains('msg')) return;   // 消息展示中，结束后再回落
+    if (statusEl.classList.contains('msg')) return;
     var goTxt, goCls;
     if (SD.goMonth === null) { goTxt = '—'; goCls = ' dim'; }
     else { goTxt = '余 ' + (100 - SD.goMonth) + '%'; goCls = pctClass(SD.goMonth); }
@@ -147,11 +222,10 @@
     var tip = [];
     if (SD.goRoll !== null) tip.push('Go 5h 已用 ' + SD.goRoll + '%');
     if (SD.goWeek !== null) tip.push('本周 ' + SD.goWeek + '%');
+    if (doingCount > 0) tip.push('进行中任务 ' + doingCount + ' 个');
     if (SD.dsAvail !== null) tip.push(SD.dsAvail ? 'DeepSeek 账户正常' : 'DeepSeek 账户异常');
     statusEl.title = tip.join(' · ');
   }
-
-  /* 互动消息：临时顶替状态内容，超时自动回落 */
   function showBubble(txt, ms) {
     var tok = ++msgToken;
     statusEl.classList.add('msg');
@@ -162,15 +236,17 @@
     }, ms || 3800);
   }
   function quip() {
+    if (!QUIPS.length) return;
     showBubble(QUIPS[quipIdx % QUIPS.length]);
     quipIdx++;
   }
 
+  /* ============ 数据轮询 ============ */
   function pullStatus() {
     fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
       if (d && d.ok && d.usage) {
         var u = d.usage;
-        if (u.monthly && typeof u.monthly.percent === 'number') { SD.goMonth = u.monthly.percent; monthlyPercent = SD.goMonth; }
+        if (u.monthly && typeof u.monthly.percent === 'number') { SD.goMonth = u.monthly.percent; usagePct = SD.goMonth; }
         if (u.rolling && typeof u.rolling.percent === 'number') SD.goRoll = u.rolling.percent;
         if (u.weekly && typeof u.weekly.percent === 'number') SD.goWeek = u.weekly.percent;
       }
@@ -185,46 +261,123 @@
       applyStatus();
     }).catch(function () { applyStatus(); });
   }
-  applyStatus();
-  setTimeout(pullStatus, 400);
-  setInterval(pullStatus, 60000);
 
-  /* ---------------- 互动：hover / 点击 / 拖拽 ---------------- */
-  cv.addEventListener('mouseenter', function () { hover = true; if (track === 'idle') setTrack('waiting', true); });
-  cv.addEventListener('mouseleave', function () { hover = false; if (track === 'waiting') setTrack('idle', true); });
+  /* 有任务在进行 → agentWorking；进行中数量下降 → taskFinished */
+  function pullTasks() {
+    fetch('/api/state').then(function (r) { return r.json(); }).then(function (d) {
+      var tasks = (d && d.tasks) || [], doing = 0;
+      for (var i = 0; i < tasks.length; i++) {
+        if (tasks[i] && tasks[i].status === 'doing') doing++;
+      }
+      var finished = (doingCount > 0 && doing < doingCount);
+      doingCount = doing;
+      if (finished) {
+        var name = trig('taskFinished');
+        if (name) {
+          startTrack(name, true);
+          var cfg = trigCfg('taskFinished');
+          if (cfg.bubble) showBubble(cfg.bubble);
+        }
+      } else {
+        refreshAmbient();
+      }
+      applyStatus();
+    }).catch(function () { });
+  }
+
+  /* ============ 清单与行为配置：热加载，改完重启应用即生效 ============ */
+  function loadConfig() {
+    return fetch('/pet.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (m) {
+        var t = buildTracks(m);
+        if (t) { TRACKS = t; if (!hasTrack(cur)) cur = ''; }
+      })
+      .catch(function () { })
+      .then(function () {
+        return fetch('/pet-behavior.json', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (b) {
+            if (b && typeof b === 'object') {
+              BH = b;
+              PARAMS = (b.params && typeof b.params === 'object') ? b.params : {};
+              if (Array.isArray(b.quips) && b.quips.length) {
+                var q = b.quips.filter(function (s) { return typeof s === 'string'; });
+                if (q.length) QUIPS = q;
+              }
+            }
+          })
+          .catch(function () { });
+      })
+      .then(function () { if (!cur) startTrack(restTrack(), false); });
+  }
+
+  /* ============ 互动 ============ */
+  cv.addEventListener('mouseenter', function () { hover = true; refreshAmbient(); });
+  cv.addEventListener('mouseleave', function () { hover = false; refreshAmbient(); });
 
   var dragging = null;
   cv.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return;
     dragging = { x: e.clientX, y: e.clientY, moved: false };
+    lastScreenX = null;
   });
   window.addEventListener('mousemove', function (e) {
-    if (!dragging || dragging.moved) return;
-    var dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
-    if (Math.sqrt(dx * dx + dy * dy) > 4) {
+    if (!dragging) return;
+    if (!dragging.moved) {
+      var dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= 4) return;
       dragging.moved = true;
       fetch('/api/pet/drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
     }
+    /* 窗口跟着光标跑，clientX 几乎不变 → 用屏幕坐标差判断拖动方向 */
+    dragDx = (lastScreenX === null) ? 0 : (e.screenX - lastScreenX);
+    lastScreenX = e.screenX;
+    if (dragDx <= -1) dragDir = 'left';
+    else if (dragDx >= 1) dragDir = 'right';
+    /* 拖拽是强交互：打断正在播的一次性动作与排队动作，立刻换成跑动 */
+    var want = restTrack();
+    if (want && want !== cur) { oneShot = false; queue = []; startTrack(want, false); }
   });
   window.addEventListener('mouseup', function (e) {
-    if (dragging && !dragging.moved && e.button === 0) {
-      setTrack('jumping', true);
-      quip();
+    var wasClick = !!(dragging && !dragging.moved && e.button === 0);
+    dragging = null; lastScreenX = null; dragDir = '';
+    if (wasClick) {
+      var cfg = trigCfg('click');
+      var n = trig('click');
+      if (n) startTrack(n, !!cfg.once);
+      if (cfg.quip) quip();
+      else if (cfg.bubble) showBubble(cfg.bubble);
     }
-    dragging = null;
+    if (!oneShot) toRest();
   });
   cv.addEventListener('dblclick', function () {
-    setTrack('waving', true);
-    showBubble('收到～工作台见！');
+    var cfg = trigCfg('doubleClick');
+    var n = trig('doubleClick');
+    if (n) startTrack(n, !!cfg.once);
+    showBubble(cfg.bubble || '收到～工作台见！');
     var w = win('main');
     if (w) { w.show(); w.setFocus(); }
   });
 
-  /* ---------------- 右键 → 打开独立菜单窗 ---------------- */
+  /* ============ 右键 → 打开独立菜单窗 ============ */
   cv.addEventListener('contextmenu', function (e) {
     e.preventDefault();
     fetch('/api/menu/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .catch(function () { });
+  });
+
+  /* ============ 启动 ============ */
+  img.onload = function () { draw(); requestAnimationFrame(tick); };
+  draw();
+  startTrack('idle', false);
+
+  loadConfig().then(function () {
+    applyStatus();
+    setTimeout(pullStatus, 300);
+    setTimeout(pullTasks, 600);
+    setInterval(pullStatus, param('statusPollMs', 60000));
+    setInterval(pullTasks, param('taskPollMs', 10000));
   });
 })();
 </script>

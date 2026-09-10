@@ -670,20 +670,30 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
         }
     }
 
-    if method == Method::Get && (path == "/pet.html" || path == "/menu.html") {
-        log_line(&format!("page fetch: {}", path));
-        let name = path.trim_start_matches('/'); // 白名单式取值，无路径穿越风险
-        match std::fs::read_to_string(project_dir().join("public").join(name)) {
-            Ok(html) => {
-                let h1 = Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap();
-                let h2 = Header::from_bytes("Cache-Control", "no-store").unwrap();
-                let _ = req.respond(Response::from_string(html).with_header(h1).with_header(h2));
+    // 白名单静态文件：文件名取自这张表，不拼接客户端输入，天然免疫路径穿越。
+    // pet.json / pet-behavior.json 走这里下发 → 改动作、调节奏、加台词都不需要重新编译。
+    const STATIC: &[(&str, &str)] = &[
+        ("/pet.html", "text/html; charset=utf-8"),
+        ("/menu.html", "text/html; charset=utf-8"),
+        ("/pet.json", "application/json; charset=utf-8"),
+        ("/pet-behavior.json", "application/json; charset=utf-8"),
+    ];
+    if method == Method::Get {
+        if let Some(&(name, ctype)) = STATIC.iter().find(|(p, _)| *p == path.as_str()) {
+            log_line(&format!("static: {}", name));
+            let file = project_dir().join("public").join(name.trim_start_matches('/'));
+            match std::fs::read_to_string(&file) {
+                Ok(body) => {
+                    let h1 = Header::from_bytes("Content-Type", ctype).unwrap();
+                    let h2 = Header::from_bytes("Cache-Control", "no-store").unwrap();
+                    let _ = req.respond(Response::from_string(body).with_header(h1).with_header(h2));
+                }
+                Err(_) => {
+                    let _ = req.respond(Response::from_string(format!("{} not found", name)).with_status_code(404));
+                }
             }
-            Err(_) => {
-                let _ = req.respond(Response::from_string(format!("{} not found", name)).with_status_code(404));
-            }
+            return;
         }
-        return;
     }
 
     if method == Method::Get && path == "/pet-sprite.webp" {
@@ -731,10 +741,19 @@ static SPRITE: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
 fn sprite_bytes() -> Option<&'static [u8]> {
     let v = SPRITE.get_or_init(|| {
+        // 1) 项目内 public/spritesheet.webp —— 换新图只需替换这个文件并重启应用，**无需重新编译**
+        let local = project_dir().join("public").join("spritesheet.webp");
+        if let Ok(b) = std::fs::read(&local) {
+            if !b.is_empty() {
+                return b;
+            }
+        }
+        // 2) dsh-pet 插件目录（便于直接取用官方素材）
         let external = home_dir().join(".dsh").join("profiles/web/node_modules")
             .join("@linxin666/dsh-pet/assets/whale-refined/spritesheet.webp");
         match std::fs::read(&external) {
             Ok(b) if !b.is_empty() => b,
+            // 3) 编译期内嵌兜底：永不缺失
             _ => SPRITE_EMBEDDED.to_vec(),
         }
     });

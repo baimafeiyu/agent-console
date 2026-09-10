@@ -1,0 +1,232 @@
+/**
+ * pet.html 动画引擎离线测试（Node + DOM 桩，不需要启动应用）
+ *
+ * 观测手段：引擎唯一的对外可见行为是 ctx.drawImage(img, sx, sy, ...)
+ *   sy = 行号 × 208  → 反推当前在播哪条轨道
+ *   sx = 帧号 × 192  → 反推播到第几帧
+ * 于是"当前动作"完全可断言。
+ *
+ * 用法：node devtools/pet-engine-test.cjs
+ */
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+const html = fs.readFileSync(path.join(ROOT, 'public', 'pet.html'), 'utf8');
+const js = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+
+const CELL_W = 192, CELL_H = 208;
+const ROW = {
+  0: 'idle', 1: 'running-right', 2: 'running-left', 3: 'waving', 4: 'jumping',
+  5: 'failed', 6: 'waiting', 7: 'running', 8: 'review'
+};
+
+/* ---------------- 虚拟时钟 + 定时器 ---------------- */
+let now = 0;
+let timers = [];
+let rafCb = null;
+let timerSeq = 1;
+global.performance = { now: () => now };
+global.requestAnimationFrame = (cb) => { rafCb = cb; };
+global.setTimeout = (fn, ms) => { const id = timerSeq++; timers.push({ id, at: now + (ms || 0), fn, every: 0 }); return id; };
+global.setInterval = (fn, ms) => { const id = timerSeq++; const p = ms || 1000; timers.push({ id, at: now + p, fn, every: p }); return id; };
+global.clearTimeout = (id) => { timers = timers.filter(t => t.id !== id); };
+
+/* ---------------- DOM 桩 ---------------- */
+const ctxLog = [];
+const canvasCtx = {
+  clearRect() { },
+  drawImage(img, sx, sy) { ctxLog.push({ sx, sy, at: now }); }
+};
+function mkEl(id) {
+  const handlers = {};
+  return {
+    id, innerHTML: '', title: '', style: {},
+    classList: {
+      _s: new Set(),
+      add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); },
+      contains(c) { return this._s.has(c); }
+    },
+    addEventListener(t, f) { handlers[t] = f; },
+    _fire(t, e) { if (handlers[t]) handlers[t](e || {}); },
+    _has(t) { return !!handlers[t]; },
+    querySelector() { return mkEl('q'); },
+    contains() { return false; },
+    getContext() { return canvasCtx; }
+  };
+}
+const els = {};
+global.document = {
+  getElementById(id) { return els[id] || (els[id] = mkEl(id)); },
+  addEventListener() { },
+  documentElement: { addEventListener() { } },
+  body: {}
+};
+const winHandlers = {};
+global.window = {
+  addEventListener(t, f) { winHandlers[t] = f; },
+  __TAURI__: null
+};
+let lastImg = null;
+global.Image = function () {
+  lastImg = this; this.complete = true; this.naturalWidth = 1536; this.onload = null;
+};
+
+/* ---------------- fetch 桩 ---------------- */
+let FAKE_DOING = 0;
+let FAKE_USAGE = 18;
+global.fetch = (url) => {
+  const u = String(url);
+  let body = {};
+  if (u.indexOf('/pet.json') >= 0) body = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'pet.json'), 'utf8'));
+  else if (u.indexOf('/pet-behavior.json') >= 0) body = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'pet-behavior.json'), 'utf8'));
+  else if (u.indexOf('/api/state') >= 0) {
+    const tasks = [];
+    for (let i = 0; i < FAKE_DOING; i++) tasks.push({ status: 'doing' });
+    tasks.push({ status: 'todo' }, { status: 'done' });
+    body = { tasks };
+  }
+  else if (u.indexOf('/api/usage') >= 0) body = { ok: true, usage: { monthly: { percent: FAKE_USAGE }, rolling: { percent: 1 }, weekly: { percent: 2 } } };
+  else if (u.indexOf('/api/dshbalance') >= 0) body = { ok: true, isAvailable: true, balances: [{ currency: 'CNY', total_balance: '1.23' }] };
+  return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+};
+
+/* ---------------- 时间推进 ---------------- */
+const flush = () => new Promise(r => setImmediate(r));
+
+async function advance(ms, stepMs = 100) {
+  const target = now + ms;
+  while (now < target) {
+    now = Math.min(target, now + stepMs);
+    const due = timers.filter(t => t.at <= now);
+    for (const t of due) {
+      if (t.every) t.at = now + t.every; else timers = timers.filter(x => x.id !== t.id);
+      t.fn();
+    }
+    if (rafCb) { const cb = rafCb; rafCb = null; cb(); }
+    await flush();
+  }
+}
+
+/* ---------------- 断言 ---------------- */
+let pass = 0, fail = 0;
+function check(name, ok, extra) {
+  if (ok) { pass++; console.log('  \u2713 ' + name); }
+  else { fail++; console.log('  \u2717 ' + name + (extra ? '  → ' + extra : '')); }
+}
+function currentRow() { return ctxLog.length ? ctxLog[ctxLog.length - 1].sy / CELL_H : null; }
+function currentName() { const r = currentRow(); return r === null ? '(未绘制)' : (ROW[r] || 'row' + r); }
+function rowSeen(name) {
+  const r = Object.keys(ROW).find(k => ROW[k] === name);
+  return ctxLog.some(c => c.sy / CELL_H === Number(r));
+}
+function frameAdvanced() {
+  const last = ctxLog.slice(-14);
+  return new Set(last.map(c => c.sx)).size > 1;
+}
+
+(async function main() {
+  console.log('== 加载 pet.html 引擎 ==');
+  // 在模块作用域执行脚本（它自带 IIFE）
+  new Function(js)();
+  check('脚本可执行且完成初始化', typeof lastImg === 'object' && !!lastImg);
+  check('已注册 canvas 交互事件', els.pet._has('mouseenter') && els.pet._has('mousedown') && els.pet._has('contextmenu'));
+  check('已注册 window 拖拽事件', typeof winHandlers.mousemove === 'function' && typeof winHandlers.mouseup === 'function');
+
+  console.log('\n== 1. 清单加载（pet.json / pet-behavior.json）==');
+  lastImg.onload();                       // 启动动画循环
+  await advance(200);
+  await flush();
+  await advance(400);
+  check('读取到 pet.json 并进入 idle（row 0）', currentName() === 'idle', currentName());
+  check('帧号在推进（不是卡在单帧）', frameAdvanced());
+  check('气泡渲染了两行状态', /Go 本月/.test(els.status.innerHTML) && /DeepSeek/.test(els.status.innerHTML));
+
+  console.log('\n== 2. 悬停 → waiting（row 6）==');
+  els.pet._fire('mouseenter');
+  await advance(400);
+  check('悬停切到 waiting', currentName() === 'waiting', currentName());
+  els.pet._fire('mouseleave');
+  await advance(400);
+  check('移开回到 idle', currentName() === 'idle', currentName());
+
+  console.log('\n== 3. 单击 → jumping（row 4）播一遍后回落 ==');
+  els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+  winHandlers.mouseup({ button: 0 });
+  await advance(200);
+  const clickName = currentName();
+  check('单击触发 jumping 或 quip 气泡', clickName === 'jumping' || /咚|氧气|主人|咕噜|跃跃|别担心|噗通|今天|被摸头|再戳/.test(els.status.innerHTML), clickName + ' / ' + els.status.innerHTML.slice(0, 40));
+  await advance(4000);
+  check('jumping 播完自动回落常态', currentName() === 'idle', currentName());
+
+  console.log('\n== 4. 有任务在进行 → running（row 7）==');
+  FAKE_DOING = 2;
+  await advance(11000);
+  check('检测到 doing 任务并切到 running', currentName() === 'running', currentName());
+
+  console.log('\n== 5. 任务完成 → review（row 8）播一遍后回到 running 家族 ==');
+  FAKE_DOING = 1;
+  await advance(11000);
+  check('进行中数量下降时播过 review', rowSeen('review'));
+  await advance(6000);
+  const afterReview = currentName();
+  check('review 播完落到 agentWorking 家族（running/溜达）',
+    ['running', 'running-right', 'running-left'].indexOf(afterReview) >= 0, afterReview);
+
+  console.log('\n== 6. 空闲溜达 → running-right / running-left（row 1 / 2）==');
+  FAKE_DOING = 0;
+  const b0 = ctxLog.length;
+  await advance(12000);                  // 数量下降 → review
+  await advance(14000);                  // 播完并落回
+  const seg0 = ctxLog.slice(b0);
+  check('无任务时落回 idle（窗口内出现过 idle）', seg0.some(c => c.sy / CELL_H === 0));
+  check('review 播完没有卡住', currentName() !== 'review', currentName());
+  const before = ctxLog.length;
+  await advance(60000);                   // 覆盖 wanderEveryIdleCycles=9 个环境态拍子
+  const seg = ctxLog.slice(before);
+  const sawR = seg.some(c => c.sy / CELL_H === 1);
+  const sawL = seg.some(c => c.sy / CELL_H === 2);
+  check('空闲时向右溜达过（running-right）', sawR);
+  check('空闲时向左溜达过（running-left）', sawL);
+
+  console.log('\n== 7. 用量越阈值 → failed（row 5）==');
+  FAKE_USAGE = 95;
+  await advance(61000);
+  const before2 = ctxLog.length;
+  await advance(60000);
+  check('月用量 ≥90% 时演过 failed', ctxLog.slice(before2).some(c => c.sy / CELL_H === 5) || rowSeen('failed'));
+
+  console.log('\n== 8. 拖动按方向换腿（row 1 / 2），且能打断一次性动作 ==');
+  FAKE_USAGE = 18;                        // 先复位告警，避免残留 failed 干扰
+  await advance(9000);
+  const before3 = ctxLog.length;
+  els.pet._fire('mousedown', { button: 0, clientX: 50, clientY: 50 });
+  winHandlers.mousemove({ clientX: 60, clientY: 50, screenX: 1000 });
+  winHandlers.mousemove({ clientX: 60, clientY: 50, screenX: 960 });   // 向左快速移动
+  await advance(300);
+  const seg3 = ctxLog.slice(before3);
+  check('拖动中切到 running-left', seg3.some(c => c.sy / CELL_H === 2), currentName());
+  winHandlers.mouseup({ button: 0 });
+  FAKE_USAGE = 18;
+  await advance(1000);
+
+  console.log('\n== 9. 兜底：配置缺失时仍能跑 ==');
+  // 用一个只有契约默认值的环境重跑一份引擎实例（fetch 全部失败）
+  const savedFetch = global.fetch;
+  global.fetch = () => Promise.reject(new Error('offline'));
+  ctxLog.length = 0;
+  const els2 = {};
+  const savedGet = global.document.getElementById;
+  global.document.getElementById = (id) => els2[id] || (els2[id] = mkEl(id));
+  new Function(js)();
+  lastImg.onload();
+  await advance(600);
+  global.document.getElementById = savedGet;
+  global.fetch = savedFetch;
+  check('配置读不到时仍按契约默认播 idle（不崩）', ctxLog.some(c => c.sy / CELL_H === 0));
+
+  console.log('\n== 结果 ==');
+  console.log('  通过 ' + pass + ' / 失败 ' + fail);
+  console.log('  共产生 ' + ctxLog.length + ' 次绘制调用');
+  process.exit(fail ? 1 : 0);
+})();
