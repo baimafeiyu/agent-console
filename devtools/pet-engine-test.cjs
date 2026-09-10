@@ -163,6 +163,7 @@ function frameAdvanced() {
     await advance(4200);                  // 等这次播完（且超过连击窗口，避免叠加连击）
   }
   const uniqClick = [...new Set(clickTracks)];
+  console.log('  实际点击序列：' + clickTracks.join(' → '));
   check('点击出现多种动作（≥3 种）', uniqClick.length >= 3, uniqClick.join(', '));
   check('点击动作全部来自配置的轮换池', clickTracks.every(n => CLICK_POOL.indexOf(n) >= 0), clickTracks.join(', '));
   let adjSame = 0;
