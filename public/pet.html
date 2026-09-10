@@ -1,0 +1,351 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none}
+  #stage{position:relative;width:192px;height:208px}
+  #pet{display:block;width:192px;height:208px;cursor:grab}
+  #pet:active{cursor:grabbing}
+  /* 气泡：对齐 dsh-pet 的 bubbleStatus 视觉（深蓝渐变 + 淡蓝描边 + 药丸形） */
+  #bubble{position:absolute;top:2px;left:50%;transform:translateX(-50%);max-width:186px;
+    color:#f4f7ff;border-radius:999px;padding:5px 12px;
+    font:12px/1.45 "Microsoft YaHei",sans-serif;letter-spacing:.02em;white-space:nowrap;
+    background:linear-gradient(160deg,rgba(19,28,54,.92),rgba(7,11,26,.96));
+    border:1px solid rgba(126,152,255,.45);box-shadow:0 4px 12px rgba(2,6,23,.35);
+    opacity:0;transition:opacity 200ms;pointer-events:none;z-index:5;
+    overflow:hidden;text-overflow:ellipsis}
+  #bubble.show{opacity:1;animation:.24s ease-out bubble-in}
+  @keyframes bubble-in{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  /* 菜单与信息面板：同一视觉语言 */
+  #menu,#panel{position:fixed;display:none;z-index:20;
+    color:#f4f7ff;border-radius:12px;
+    background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
+    border:1px solid rgba(126,152,255,.45);box-shadow:0 8px 24px rgba(2,6,23,.45)}
+  #menu{min-width:150px;padding:5px;font:12px/1.4 "Microsoft YaHei",sans-serif}
+  #menu .mi{padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  #menu .mi:hover{background:rgba(126,152,255,.22);color:#dbe4ff}
+  #menu .sep{height:1px;margin:3px 8px;border-top:1px solid rgba(126,152,255,.28)}
+  #menu .mi.head{color:#9fb0e8;font-size:10.5px;font-weight:700;padding:3px 10px 1px;cursor:default;letter-spacing:.04em}
+  #menu .mi.head:hover{background:transparent;color:#9fb0e8}
+  #panel{width:182px;padding:10px 12px;font:12px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em}
+  #panel .p-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  #panel .p-title b{font-size:12.5px;color:#dbe4ff}
+  #panel .p-title .p-close{cursor:pointer;color:#9fb0e8;font-size:12px;padding:0 4px;border-radius:6px}
+  #panel .p-title .p-close:hover{color:#fff}
+  #panel .row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;margin:7px 0}
+  #panel .u-label{color:#9fb0e8;font-size:11.5px;font-weight:700;white-space:nowrap}
+  #panel .bar{height:8px;border-radius:999px;background:rgba(126,152,255,.18);overflow:hidden}
+  #panel .bar i{display:block;height:100%;border-radius:999px;background:#7e98ff;transition:width 300ms ease}
+  #panel .bar i.warn{background:#f0c978}
+  #panel .bar i.hot{background:#ff958d}
+  #panel .u-pct{color:#f4f7ff;font-size:11.5px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #panel .kv{display:flex;justify-content:space-between;margin:6px 0;color:#c8d4f5}
+  #panel .kv b{color:#f4f7ff;font-variant-numeric:tabular-nums}
+  #panel .p-note{margin-top:8px;color:#8fa0d6;font-size:11px}
+  #panel .p-foot{margin-top:8px;color:#9fb0e8;font-size:10.5px;border-top:1px solid rgba(126,152,255,.28);padding-top:6px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="pet" width="192" height="208"></canvas>
+  <div id="bubble"></div>
+</div>
+<div id="panel"></div>
+<div id="menu">
+  <div class="mi head">鲸鱼娘 · 桌面宠物</div>
+  <div class="mi" data-act="hide">隐藏宠物</div>
+  <div class="sep"></div>
+  <div class="mi head">查余额</div>
+  <div class="mi" data-act="usage">OpenCode Go 用量</div>
+  <div class="mi" data-act="dsbal">DeepSeek 余额</div>
+  <div class="sep"></div>
+  <div class="mi" data-act="workbench">打开工作台</div>
+  <div class="sep"></div>
+  <div class="mi head">唤起智能体</div>
+  <div class="mi" data-act="agent" data-id="workbuddy">WorkBuddy</div>
+  <div class="mi" data-act="agent" data-id="opencode">OpenCode</div>
+  <div class="mi" data-act="agent" data-id="dsh">DeepSeek Harness</div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var CELL_W = 192, CELL_H = 208;
+  /* 雪碧图 1536x1872 = 8 列 x 9 行，行序 = pet.json tracks 键序：
+     0 idle / 1 run-right / 2 run-left / 3 waving / 4 jumping /
+     5 failed / 6 waiting / 7 running / 8 review */
+  var TRACKS = {
+    idle:    { row: 0, frames: 6, durations: [500, 500, 600, 500, 500, 600], loop: true },
+    waiting: { row: 6, frames: 6, durations: [550, 550, 600, 550, 550, 600], loop: true },
+    waving:  { row: 3, frames: 4, durations: [450, 450, 450, 450], loop: false },
+    jumping: { row: 4, frames: 5, durations: [400, 400, 400, 450, 450], loop: false },
+    failed:  { row: 5, frames: 8, durations: [550, 550, 550, 600, 650, 700, 550, 550], loop: false }
+  };
+  var QUIPS = [
+    '咚——跳一下！', '氧气充满，继续潜～', '主人在叫我吗？', '咕噜咕噜～',
+    '跃跃欲试！', '别担心，有我在～', '噗通噗通，心跳加速', '今天也要加油～',
+    '被摸头了，很开心', '再戳一下试试呀'
+  ];
+  var quipIdx = 0;
+
+  var img = new Image();
+  img.src = '/pet-sprite.webp';
+  var cv = document.getElementById('pet');
+  var ctx = cv.getContext('2d');
+  var track = 'idle', idx = 0, elapsed = 0, last = performance.now();
+  var idleCycles = 0, hover = false;
+  var monthlyPercent = 0;
+
+  var T = window.__TAURI__ || null;
+  function win(label) {
+    try {
+      var ns = T && (T.webviewWindow || T.window);
+      if (ns && ns.WebviewWindow) return ns.WebviewWindow.getByLabel(label);
+    } catch (e) { }
+    return null;
+  }
+
+  function setTrack(name, force) {
+    if (!force && track === name) return;
+    if (!TRACKS[name]) return;
+    track = name; idx = 0; elapsed = 0;
+  }
+
+  function draw() {
+    var t = TRACKS[track];
+    ctx.clearRect(0, 0, CELL_W, CELL_H);
+    if (img.complete && img.naturalWidth) {
+      ctx.drawImage(img, idx * CELL_W, t.row * CELL_H, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
+    }
+  }
+
+  function tick(now) {
+    var delta = now - last;
+    last = now;
+    elapsed += delta;
+    var t = TRACKS[track];
+    if (elapsed >= (t.durations[idx] || 300)) {
+      elapsed = 0;
+      idx++;
+      if (idx >= t.frames) {
+        if (track === 'idle') {
+          idleCycles++;
+          idx = 0;
+          if (hover) setTrack('waiting', true);
+          else if (idleCycles % 4 === 3) setTrack('waving', true);
+          else if (monthlyPercent >= 90 && idleCycles % 6 === 5) setTrack('failed', true);
+        } else if (t.loop) {
+          idx = 0;
+        } else {
+          setTrack('idle', true);
+        }
+      }
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+  img.onload = function () { draw(); requestAnimationFrame(tick); };
+  draw();
+
+  /* ---------------- 气泡 ---------------- */
+  var bubble = document.getElementById('bubble'), bubbleT = 0;
+  function showBubble(txt, ms) {
+    bubble.textContent = txt;
+    bubble.classList.add('show');
+    clearTimeout(bubbleT);
+    bubbleT = setTimeout(function () { bubble.classList.remove('show'); }, ms || 4200);
+  }
+  function quip() {
+    showBubble(QUIPS[quipIdx % QUIPS.length]);
+    quipIdx++;
+  }
+
+  function refreshUsage() {
+    fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok && d.usage && d.usage.monthly && typeof d.usage.monthly.percent === 'number') {
+        monthlyPercent = d.usage.monthly.percent;
+        showBubble('Go 用量 5h ' + (d.usage.rolling ? d.usage.rolling.percent : '-') + '% · 月余 ' + (100 - monthlyPercent) + '%');
+      }
+    }).catch(function () { });
+  }
+  setInterval(refreshUsage, 60000);
+  setTimeout(refreshUsage, 1500);
+
+  /* ---------------- 弹出信息面板 ---------------- */
+  var panel = document.getElementById('panel');
+  var menu = document.getElementById('menu');
+  function hideMenu() { menu.style.display = 'none'; }
+  function hidePanel() { panel.style.display = 'none'; }
+  function hidePopups() { hideMenu(); hidePanel(); }
+
+  function cls(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
+  function barRow(label, u) {
+    var p = u && typeof u.percent === 'number' ? u.percent : 0;
+    return '<div class="row"><span class="u-label">' + label + '</span>'
+      + '<span class="bar"><i class="' + cls(p) + '" style="width:' + p + '%"></i></span>'
+      + '<span class="u-pct">' + p + '%</span></div>';
+  }
+  function fmtDate(iso) {
+    var m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[2] + '-' + m[3] : '';
+  }
+  function showPanelGo() {
+    panel.innerHTML = '<div class="p-title"><b>OpenCode Go 用量</b><span class="p-close">✕</span></div>'
+      + '<div class="p-body">读取中…</div>';
+    panel.style.display = 'block';
+    fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
+      var body = panel.querySelector('.p-body');
+      if (!body) return;
+      if (d && d.ok && d.usage) {
+        var u = d.usage;
+        var foot = [];
+        if (u.rolling && u.rolling.resetsAt) foot.push('5h 重置 ' + fmtDate(u.rolling.resetsAt));
+        if (u.weekly && u.weekly.resetsAt) foot.push('周重置 ' + fmtDate(u.weekly.resetsAt));
+        if (u.monthly && u.monthly.resetsAt) foot.push('月重置 ' + fmtDate(u.monthly.resetsAt));
+        body.innerHTML = barRow('5 小时', u.rolling) + barRow('本周', u.weekly) + barRow('本月', u.monthly)
+          + (foot.length ? '<div class="p-foot">' + foot.join(' · ') + '</div>' : '');
+      } else {
+        body.innerHTML = '<div class="p-note">读取失败：' + ((d && (d.reason || d.detail)) || '未知') + '</div>';
+      }
+    }).catch(function () {
+      var body = panel.querySelector('.p-body');
+      if (body) body.innerHTML = '<div class="p-note">网络错误</div>';
+    });
+  }
+  function showPanelDs() {
+    panel.innerHTML = '<div class="p-title"><b>DeepSeek 余额</b><span class="p-close">✕</span></div>'
+      + '<div class="p-body">读取中…</div>';
+    panel.style.display = 'block';
+    fetch('/api/dshbalance').then(function (r) { return r.json(); }).then(function (d) {
+      var body = panel.querySelector('.p-body');
+      if (!body) return;
+      if (d && d.ok && Array.isArray(d.balances) && d.balances.length) {
+        var rows = '';
+        d.balances.forEach(function (b) {
+          rows += '<div class="kv"><span>总余额（' + (b.currency || 'CNY') + '）</span><b>¥ ' + b.total_balance + '</b></div>'
+            + '<div class="kv"><span>赠送余额</span><b>¥ ' + b.granted_balance + '</b></div>'
+            + '<div class="kv"><span>充值余额</span><b>¥ ' + b.topped_up_balance + '</b></div>';
+        });
+        body.innerHTML = rows
+          + '<div class="p-foot">' + (d.isAvailable ? '账户状态正常' : '账户状态异常') + '</div>';
+      } else {
+        body.innerHTML = '<div class="p-note">读取失败：' + ((d && (d.reason || d.detail)) || '未知') + '</div>';
+      }
+    }).catch(function () {
+      var body = panel.querySelector('.p-body');
+      if (body) body.innerHTML = '<div class="p-note">网络错误</div>';
+    });
+  }
+  panel.addEventListener('click', function (e) {
+    if (e.target.classList && e.target.classList.contains('p-close')) hidePanel();
+  });
+
+  /* ---------------- 互动：hover / 点击 / 拖拽 ---------------- */
+  cv.addEventListener('mouseenter', function () { hover = true; if (track === 'idle') setTrack('waiting', true); });
+  cv.addEventListener('mouseleave', function () { hover = false; if (track === 'waiting') setTrack('idle', true); });
+
+  /* 全区域拖拽（Rust 自研跟手）+ 脸部单击/双击互动 */
+  var dragging = null;
+  cv.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return;
+    dragging = { x: e.clientX, y: e.clientY, moved: false };
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!dragging || dragging.moved) return;
+    var dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 4) {
+      dragging.moved = true;
+      hidePopups();
+      fetch('/api/pet/drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
+    }
+  });
+  window.addEventListener('mouseup', function (e) {
+    if (dragging && !dragging.moved && e.button === 0) {
+      hidePopups();
+      setTrack('jumping', true);
+      quip();
+    }
+    dragging = null;
+  });
+  cv.addEventListener('dblclick', function () {
+    setTrack('waving', true);
+    showBubble('收到～工作台见！');
+    var w = win('main');
+    if (w) { w.show(); w.setFocus(); }
+  });
+
+  /* ---------------- 右键菜单 ---------------- */
+  function closeAll() { hidePopups(); }
+  cv.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    hidePanel();
+    menu.style.left = '6px';
+    menu.style.top = '4px';
+    menu.style.display = 'block';
+  });
+  document.documentElement.addEventListener('mouseleave', closeAll);
+  window.addEventListener('blur', closeAll);
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+  document.addEventListener('click', function (e) {
+    if (!menu.contains(e.target) && !panel.contains(e.target) && e.target !== cv) closeAll();
+  });
+
+  menu.addEventListener('click', function (e) {
+    var mi = e.target.closest ? e.target.closest('.mi[data-act]') : null;
+    if (!mi) return;
+    hideMenu();
+    var act = mi.getAttribute('data-act');
+    if (act === 'hide') {
+      showBubble('下次见～');
+      var hidden = (function () {
+        try {
+          if (T && T.window && T.window.getCurrentWindow) { T.window.getCurrentWindow().hide(); return true; }
+        } catch (err) { }
+        return false;
+      })();
+      if (!hidden) {
+        fetch('/api/pet/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
+      }
+    } else if (act === 'usage') {
+      showPanelGo();
+    } else if (act === 'dsbal') {
+      showPanelDs();
+    } else if (act === 'workbench') {
+      setTrack('waving', true);
+      showBubble('工作台来啦～');
+      var opened = (function () {
+        try {
+          var w = win('main');
+          if (w) { w.show(); w.setFocus(); return true; }
+        } catch (err) { }
+        return false;
+      })();
+      if (!opened) {
+        fetch('/api/main/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
+      }
+    } else if (act === 'agent') {
+      var id = mi.getAttribute('data-id');
+      var name = mi.textContent;
+      setTrack('jumping', true);
+      if (id === 'dsh') {
+        fetch('/api/openurl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'http://127.0.0.1:3080' }) })
+          .then(function () { showBubble('dsh 页面已打开～'); })
+          .catch(function () { showBubble('dsh 打不开，可能没启动', true); });
+      } else {
+        fetch('/api/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
+          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (r && r.ok) { showBubble('已唤起 ' + name + '～'); }
+            else {
+              return fetch('/api/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
+                .then(function () { showBubble(name + ' 没在运行，已尝试启动'); });
+            }
+          })
+          .catch(function () { showBubble('唤起失败……', true); });
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>

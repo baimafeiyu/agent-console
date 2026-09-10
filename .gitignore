@@ -1,0 +1,14 @@
+# Rust / Tauri 构建产物（约 3.4GB，绝不入库）
+desktop/src-tauri/target/
+
+# Tauri 生成的 schema（tauri-build 每次构建自动重建）
+desktop/src-tauri/gen/
+
+# 运行时日志
+desktop.log
+
+# 编辑器 / 系统
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

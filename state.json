@@ -1,0 +1,46 @@
+{
+  "tasks": [
+    {
+      "id": "t2",
+      "title": "smart-reimburse 水费填报模板适配宜搭上传规范",
+      "agent": "opencode",
+      "due": "2026-09-08",
+      "status": "doing",
+      "note": "xls 列序需与平台模板一致"
+    },
+    {
+      "id": "t3",
+      "title": "给 dsh 装一个 PDF 解析插件",
+      "agent": "dsh",
+      "due": "2026-09-08",
+      "status": "todo",
+      "note": "dsh plugin --profile web add <包名>"
+    },
+    {
+      "id": "t4",
+      "title": "复盘：半导体材料主线板块地位判定",
+      "agent": "workbuddy",
+      "due": "2026-09-09",
+      "status": "todo",
+      "note": "先画板块时间线，再定龙头/补涨"
+    },
+    {
+      "id": "t5",
+      "title": "验证 ACP 端口 8899 能否被外部客户端驱动",
+      "agent": "opencode-acp",
+      "due": "2026-09-11",
+      "status": "todo",
+      "note": ""
+    },
+    {
+      "id": "tmts82m3j",
+      "title": "检查下dsh版本是否是最新版",
+      "agent": "dsh",
+      "due": "2026-09-08",
+      "status": "todo",
+      "note": ""
+    }
+  ],
+  "bindings": {},
+  "cleared": false
+}

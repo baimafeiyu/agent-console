@@ -1,0 +1,118 @@
+{
+  "_comment": "编辑本文件即可增删智能体。字段说明见 README.md",
+  "agents": [
+    {
+      "id": "workbuddy",
+      "name": "WorkBuddy",
+      "subtitle": "指挥台",
+      "role": "编排者 · 股票复盘 · 资料库 · 通达信数据",
+      "kind": "app",
+      "color": "#5c88b8",
+      "dir": "C:\\Users\\61401\\WorkBuddy\\2026-09-08-09-01-21",
+      "launch": {
+        "cmd": "C:\\Users\\61401\\AppData\\Local\\Programs\\WorkBuddy\\WorkBuddy.exe",
+        "args": []
+      },
+      "detect": {
+        "process": "WorkBuddy.exe",
+        "port": 0
+      },
+      "titleHint": "WorkBuddy",
+      "strength": "唯一编排者。有通达信连接器、资料库、自动化，适合做派发中枢",
+      "caveat": ""
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "subtitle": "开发台",
+      "role": "宜搭 smart-reimburse · 脚本 · 代码重构",
+      "kind": "tui",
+      "color": "#163b3d",
+      "dir": "C:\\Users\\61401\\WorkBuddy\\2026-09-08-09-01-21",
+      "launch": {
+        "cmd": "opencode",
+        "args": []
+      },
+      "detect": {
+        "process": "OpenCode.exe",
+        "port": 0
+      },
+      "titleHint": "OpenCode",
+      "dispatch": { "mode": "cli" },
+      "strength": "可被脚本调度：opencode run \"任务\" --agent X --dir D --format json",
+      "caveat": "TUI 交互式，适合需要来回确认的活"
+    },
+    {
+      "id": "opencode-acp",
+      "name": "OpenCode ACP",
+      "subtitle": "调度接口",
+      "role": "后台服务 · 让别的客户端驱动 opencode",
+      "kind": "service",
+      "color": "#9a6a18",
+      "dir": "C:\\Users\\61401\\WorkBuddy\\2026-09-08-09-01-21",
+      "launch": {
+        "cmd": "opencode",
+        "args": [
+          "acp",
+          "--port",
+          "8899"
+        ]
+      },
+      "detect": {
+        "process": "",
+        "port": 8899
+      },
+      "titleHint": "",
+      "strength": "Agent Client Protocol 标准接口，是跨智能体派活的正规通道",
+      "caveat": "无窗口，只有端口状态"
+    },
+    {
+      "id": "dsh",
+      "name": "DeepSeek Harness",
+      "subtitle": "能力扩展台",
+      "role": "插件运行时 · dshmarket 市场 · 能力突破",
+      "kind": "web",
+      "color": "#d95f5f",
+      "dir": "C:\\Users\\61401\\.dsh",
+      "launch": {
+        "cmd": "dsh",
+        "args": [
+          "--profile",
+          "web",
+          "--port",
+          "3080"
+        ]
+      },
+      "url": "http://127.0.0.1:3080",
+      "detect": {
+        "process": "",
+        "port": 3080,
+        "pidFile": "~/.dsh/dsh-process.json"
+      },
+      "titleHint": "DeepSeek Harness",
+      "dispatch": { "mode": "cli", "cmd": "dsh --profile headless" },
+      "strength": "可装插件突破能力边界：dsh plugin --profile web add <包名>",
+      "caveat": "无 CLI 非交互入口，只能走 Web UI 或人工操作"
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "subtitle": "外网参谋",
+      "role": "通用推理 · 长文写作 · 外网检索 · 交叉验证",
+      "kind": "app",
+      "color": "#10a37f",
+      "dir": "C:\\Users\\61401",
+      "launch": {
+        "cmd": "chatgpt.exe",
+        "args": []
+      },
+      "detect": {
+        "process": "ChatGPT.exe",
+        "port": 0
+      },
+      "titleHint": "ChatGPT",
+      "strength": "通用能力最强，适合要「第二意见」、写长文、查外网资料",
+      "caveat": "不接本地文件系统，拿不到你的项目上下文。别让它直接改代码"
+    }
+  ]
+}

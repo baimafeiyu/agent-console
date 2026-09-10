@@ -1,0 +1,1368 @@
+﻿<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>智能体指挥台</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink-deep: #163b3d;
+    --ink: #31595a;
+    --muted: #708786;
+    --positive: #16856f;
+    --positive-strong: #116b5b;
+    --positive-pale: #dff4ea;
+    --brand: #16856f;
+    --brand-soft: #dff4ea;
+    --danger: #d95f5f;
+    --danger-pale: #ffe7e1;
+    --warning: #9a6a18;
+    --warning-pale: #fff2c7;
+    --paper: #f8f5ed;
+    --surface: #fffdf7;
+    --surface-soft: #edf7f0;
+    --surface-raised: #fffaf0;
+    --line: #d7ded5;
+    --line-strong: #b9cdc5;
+    --blue: #5c88b8;
+    --coral: #d95f5f;
+    --coral-pale: #ffe7e1;
+    --sun: #f6c95f;
+    --sun-pale: #fff2c7;
+    --shadow: 0 1px 0 rgba(22,59,61,.04), 0 8px 24px rgba(22,59,61,.055);
+    --shadow-soft: 0 4px 14px rgba(22,59,61,.065);
+    --radius: 22px;
+    --control-radius: 14px;
+    --sidebar: 256px;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --ink-deep: #e8f4ee;
+    --ink: #c5ddd5;
+    --muted: #91aaa3;
+    --positive: #73d1b6;
+    --positive-strong: #9be2cc;
+    --positive-pale: #193f37;
+    --brand: #73d1b6;
+    --brand-soft: #193f37;
+    --danger: #ff958d;
+    --danger-pale: #4b2928;
+    --warning: #f0c978;
+    --warning-pale: #4a3c20;
+    --paper: #111b1b;
+    --surface: #192827;
+    --surface-soft: #20332f;
+    --surface-raised: #263a35;
+    --line: #344b46;
+    --line-strong: #4b6760;
+    --blue: #8eb9e3;
+    --coral: #ff958d;
+    --coral-pale: #4b2928;
+    --sun: #f0c978;
+    --sun-pale: #4a3c20;
+    --shadow: 0 1px 0 rgba(255,255,255,.025), 0 8px 24px rgba(0,0,0,.16);
+    --shadow-soft: 0 4px 14px rgba(0,0,0,.15);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-width: 0;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    color: var(--ink-deep);
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(circle, color-mix(in srgb, var(--positive) 12%, transparent) 1px, transparent 1.5px),
+      linear-gradient(135deg, color-mix(in srgb, var(--sun-pale) 45%, transparent), transparent 42%);
+    background-size: 22px 22px, 100% 100%;
+    font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+  }
+  button, input, select, textarea { font: inherit; }
+  button, input, select { min-height: 44px; }
+  button, input, select, textarea { border: 1px solid var(--line); border-radius: 12px; }
+  input, select, textarea { width: 100%; padding: 10px 12px; color: var(--ink-deep); background: var(--surface); font-size: 16px; }
+  textarea { min-height: 92px; resize: vertical; }
+  button {
+    padding: 10px 16px;
+    color: var(--ink-deep);
+    background: var(--surface);
+    cursor: pointer;
+    transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+  }
+  button:hover { border-color: var(--brand); transform: translateY(-1px); }
+  button:active { transform: scale(0.98); }
+  button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid color-mix(in srgb,var(--positive) 35%,transparent);outline-offset:2px}
+  [hidden]{display:none !important}
+  button.primary { color: #fffaf3; border-color: var(--positive-strong); background: var(--positive-strong); }
+  button.secondary { color: var(--brand); background: var(--brand-soft); }
+  button.danger { color: var(--danger); background: var(--danger-pale); }
+  button.ghost { border-color: transparent; background: transparent; }
+  input, select { height: 48px; min-height: 48px; border-radius: var(--control-radius); background: var(--surface-raised); }
+
+  .app-icon{display:inline-block;flex:0 0 auto;width:20px;height:20px;fill:none;stroke:currentColor;
+    stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.2em}
+  .icon-sprite{position:absolute;width:0;height:0;overflow:hidden}
+
+  /* ---------- 骨架 ---------- */
+  .app-shell{min-height:100dvh}
+  .sidebar{position:fixed;inset:0 auto 0 0;z-index:20;display:none;width:var(--sidebar);
+    padding:24px 18px;border-right:1px solid var(--line-strong);
+    background:color-mix(in srgb,var(--surface-raised) 96%,transparent)}
+  .sidebar.open{display:block}
+  .brand{padding:10px 10px 18px;margin-bottom:12px;border-bottom:1px dashed var(--line-strong)}
+  .brand-mark{display:grid;place-items:center;width:54px;height:54px;margin-bottom:14px;
+    border:1px solid color-mix(in srgb,var(--positive) 55%,var(--line));
+    border-radius:18px 18px 20px 16px;color:var(--positive-strong);background:var(--positive-pale);
+    box-shadow:4px 5px 0 color-mix(in srgb,var(--sun) 35%,transparent);transform:rotate(-2deg)}
+  .brand-mark .app-icon{width:30px;height:30px}
+  .brand h1{margin:0;font-size:21px;letter-spacing:-.03em}
+  .brand p{margin:5px 0 0;color:var(--muted);font-size:13px}
+  .nav-list{display:grid;gap:5px}
+  .nav-button{display:flex;align-items:center;gap:11px;width:100%;min-height:48px;padding:11px 13px;
+    border-color:transparent;border-radius:15px;background:transparent;font-weight:600;text-align:left}
+  .nav-button.active{color:var(--positive-strong);background:var(--positive-pale);box-shadow:inset 3px 0 var(--positive)}
+  .sidebar-footer{position:absolute;right:18px;bottom:24px;left:18px;display:grid;gap:8px;padding-top:14px;border-top:1px dashed var(--line-strong)}
+  .sidebar-footer button,.mobile-tools button,.theme-button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+  .main{position:relative;width:100%;padding:18px 16px calc(92px + env(safe-area-inset-bottom))}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    max-width:1180px;margin:0 auto 18px;padding-bottom:14px;border-bottom:1px dashed var(--line-strong)}
+  .topbar-copy h2{margin:0;font-size:clamp(1.35rem,2.6vw,1.75rem);font-weight:650;letter-spacing:-.025em}
+  .topbar-copy p{margin:3px 0 0;color:var(--muted)}
+  .topbar-side{display:flex;flex:0 0 auto;align-items:center;gap:8px;flex-wrap:wrap}
+  .menu-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:48px;
+    min-height:44px;border-color:var(--line-strong);background:var(--surface-raised)}
+  .pet-button{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:40px;
+    border-color:var(--line-strong);background:var(--sun-pale);color:var(--warning)}
+  .theme-button{flex:0 0 auto;min-width:48px;border-color:var(--line-strong);background:var(--sun-pale)}
+  .status-chip{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:5px 12px;
+    border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);
+    color:var(--muted);font-size:12.5px;font-weight:600}
+  .storage-alert,.top-reminder{max-width:1180px;margin:0 auto 16px;padding:13px 16px;border:1px solid var(--line);
+    border-radius:16px;box-shadow:var(--shadow-soft);background:var(--surface)}
+  .storage-alert{color:var(--danger);background:var(--danger-pale)}
+  .top-reminder{border-style:dashed;background:color-mix(in srgb,var(--sun-pale) 78%,var(--surface));color:var(--ink)}
+  .mobile-tools{position:relative;z-index:2;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;max-width:1180px;margin:0 auto 16px}
+  .mobile-tools button{min-height:44px;padding:8px 6px;font-size:13px;
+    border-color:var(--line-strong);background:var(--surface-raised)}
+  .nav-backdrop{position:fixed;inset:0;z-index:25;display:none;background:rgba(22,59,61,.35)}
+  .nav-backdrop.show{display:block}
+  .workspace{max-width:1180px;margin:0 auto}
+  .page-section{display:none;animation:enter 220ms ease both}
+  .page-section.active{display:block}
+  @keyframes enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 22px}
+  .section-heading h2{margin:0;font-size:clamp(1.75rem,3.5vw,2.25rem);font-weight:650;letter-spacing:-.04em;line-height:1.16}
+  .section-heading p{max-width:56ch;margin:6px 0 0;color:var(--muted)}
+  .grid{display:grid;gap:16px}
+  .grid.two,.grid.three{grid-template-columns:1fr}
+  .panel{position:relative;min-width:0;padding:20px;border:1px solid var(--line-strong);
+    border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)}
+  .panel h3{margin:0 0 14px;font-size:18px}
+  .panel p{margin-top:0}
+  .panel.soft{border-style:dashed;background:var(--surface-soft);box-shadow:none}
+  .panel.mint{background:var(--positive-pale)}
+  .panel.coral{background:var(--coral-pale)}
+  .panel.sun{background:var(--sun-pale)}
+  .panel.featured{border-color:color-mix(in srgb,var(--line-strong) 78%,transparent);background:var(--surface-raised)}
+  .panel.plain{background:transparent;box-shadow:none}
+  .panel::after{position:absolute;width:34px;height:10px;border-radius:3px;
+    background:color-mix(in srgb,var(--sun) 55%,transparent);content:"";opacity:0;pointer-events:none;transform:rotate(3deg)}
+  .panel.sticker::after{top:-5px;right:24px;opacity:1}
+  .panel-title{display:flex;align-items:center;gap:9px;grid-column:1/-1;margin:0 0 2px;font-size:18px}
+  .panel-title .app-icon{color:var(--positive)}
+  .dashboard-form-card{grid-auto-rows:max-content}
+  .hero-heading{align-items:center;padding:4px 0 8px}
+  .hero-copy{max-width:650px}
+  .hero-copy h2{font-size:clamp(1.75rem,3.5vw,2.25rem);font-weight:650;letter-spacing:-.035em}
+  .hero-copy p{max-width:56ch;margin:6px 0 0;color:var(--muted)}
+  .hero-illustration{flex:0 0 auto;width:clamp(150px,20vw,238px);color:var(--ink-deep);filter:drop-shadow(0 9px 0 rgba(22,59,61,.05))}
+  .hero-illustration svg{display:block;width:100%;height:auto}
+
+  .kpi-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .icon-base{display:grid;place-items:center;width:38px;height:38px;
+    border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:14px;
+    background:color-mix(in srgb,var(--surface) 64%,transparent);transform:rotate(2deg)}
+  .icon-base .app-icon{width:19px;height:19px}
+  .kpi-label{color:var(--ink);font-size:.75rem;font-weight:600;letter-spacing:.035em}
+  .kpi-value{margin:8px 0 6px;font-size:clamp(1.75rem,3.2vw,2.5rem);font-weight:600;line-height:1.08;
+    letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+  .kpi-note{color:var(--muted);font-size:14px}
+  .positive{color:var(--positive)}
+  .expense-color{color:var(--danger)}
+  .subtle{color:var(--muted);font-size:14px}
+  .progress-track{height:12px;overflow:hidden;border-radius:999px;background:var(--line)}
+  .progress-fill{height:100%;border-radius:inherit;background:var(--positive);transform-origin:left}
+
+  .form-grid{display:grid;gap:14px}
+  .field{display:grid;grid-auto-rows:max-content;gap:7px;min-width:0;align-items:start}
+  .field label{display:flex;align-items:end;min-height:22px;color:var(--ink);font-size:14px;font-weight:700;
+    line-height:1.35;letter-spacing:.01em}
+  .form-hint{margin:12px 0 0;padding:10px 12px;border-left:3px solid var(--sun);color:var(--muted);
+    background:color-mix(in srgb,var(--sun-pale) 62%,transparent);font-size:13px}
+  .formula-list{display:grid;gap:0;margin:0}
+  .formula-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:12px 0;border-top:1px solid var(--line)}
+  .formula-row:first-child{border-top:0}
+  .formula-row dt{color:var(--muted)}
+  .formula-row dd{margin:0;font-weight:750;text-align:right;overflow-wrap:anywhere}
+
+  .record-list{display:grid;gap:9px}
+  .record-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;
+    padding:13px 0;border-top:1px dashed var(--line)}
+  .record-card:first-child{border-top:0}
+  .record-card.done{opacity:.62}
+  .record-card.done .record-title{text-decoration:line-through}
+  .record-title{font-weight:750}
+  .record-meta{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+  .record-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+  .record-actions button{min-width:44px;padding:8px 10px}
+  .record-amount{font-size:17px;font-weight:800;text-align:right;white-space:nowrap}
+  .category-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;
+    color:var(--positive-strong);background:var(--positive-pale)}
+  .category-icon[data-c="over"]{color:var(--danger);background:var(--danger-pale)}
+  .category-icon[data-c="warning"]{color:var(--warning);background:var(--sun-pale)}
+  .recent-section{margin-top:16px;padding:20px;border:1px dashed var(--line-strong);border-radius:var(--radius);
+    background:color-mix(in srgb,var(--surface-raised) 72%,transparent)}
+  .recent-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .recent-heading h3{display:flex;align-items:center;gap:8px;margin:0}
+  .recent-heading button{min-width:44px}
+  .recent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}
+  .recent-grid>.empty-state{grid-column:1/-1}
+  .recent-note{display:flex;align-items:center;gap:10px;min-width:0;
+    padding:11px 12px;border:1px solid var(--line);border-radius:14px;
+    background:var(--surface);box-shadow:var(--shadow-soft)}
+  .recent-note .category-icon{width:34px;height:34px;border-radius:10px;flex:none}
+  .recent-note .category-icon .app-icon{width:16px;height:16px}
+  .recent-note.over{border-color:color-mix(in srgb,var(--danger) 45%,var(--line));
+    background:color-mix(in srgb,var(--danger-pale) 55%,var(--surface))}
+  .recent-copy{flex:1;min-width:0;display:grid;gap:2px}
+  .recent-copy .record-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+  .recent-copy .record-meta{font-size:12px}
+  .recent-btn{flex:none;min-height:32px;padding:5px 12px;font-size:12.5px}
+  .empty-state{display:grid;justify-items:center;gap:8px;min-height:120px;align-content:center;
+    padding:26px 4px;color:var(--muted);text-align:center}
+  .empty-state .app-icon{width:36px;height:36px;color:var(--positive)}
+  .tag{display:inline-flex;align-items:center;min-height:28px;padding:3px 9px;border-radius:999px;
+    color:var(--positive-strong);background:var(--positive-pale);font-size:11.5px;font-weight:800;letter-spacing:.02em}
+
+  /* ---------- 智能体 ---------- */
+  .agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .agent-panel::before{position:absolute;left:-8px;top:20px;width:17px;height:40px;border-radius:0 4px 4px 0;
+    background:color-mix(in srgb,var(--sun) 55%,transparent);content:"";opacity:.9;transform:rotate(2deg)}
+  .agent-panel:hover{border-color:color-mix(in srgb,var(--accent) 48%,var(--line-strong));
+    box-shadow:0 12px 30px color-mix(in srgb,var(--accent) 15%,transparent)}
+  .agent-strength{display:flex;gap:6px;align-items:flex-start;margin-top:9px;font-size:12px;
+    line-height:1.5;color:var(--positive-strong)}
+  .agent-strength .app-icon{width:14px;height:14px;flex:none;margin-top:3px}
+  .agent-facts{display:flex;flex-wrap:wrap;gap:5px}
+  .agent-facts span{padding:3px 8px;border-radius:8px;font-size:11px;letter-spacing:.02em;
+    color:var(--ink);background:color-mix(in srgb,var(--accent) 7%,var(--surface));
+    border-color:color-mix(in srgb,var(--accent) 28%,var(--line))}
+  .agent-current{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;
+    border-radius:0 12px 12px 0;font-size:12.5px;line-height:1.5}
+  .agent-current .app-icon{width:14px;height:14px;flex:none;margin-top:3px;color:var(--accent)}
+  .agent-mini button{padding:7px 4px;min-height:40px;font-size:12.5px;border-radius:11px}
+  .agent-mini button{color:var(--muted)}
+  .agent-mini button:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+  .led{padding:4px 10px;font-size:11px;letter-spacing:.02em}
+  .led.on{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--positive) 28%,transparent)}
+  .led-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+  .led-dot.on{background:var(--positive);box-shadow:0 0 0 3px color-mix(in srgb,var(--positive) 18%,transparent)}
+  .led-dot.off{background:var(--danger)}
+  .led-dot.wait{background:var(--sun)}
+
+  .ac2-top{display:flex;align-items:center;gap:12px}
+  .ac2-mark{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;flex:none;
+    color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface));
+    border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+  .ac2-mark .app-icon{width:22px;height:22px}
+  .ac2-id{flex:1;min-width:0}
+  .ac2-name{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:16.5px;font-weight:700;letter-spacing:-.02em}
+  .ac2-sub{font-size:11px;font-weight:800;color:var(--muted);background:var(--surface-soft);
+    border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  .ac2-role{color:var(--muted);font-size:12.5px;margin-top:3px;line-height:1.5}
+  .ac2-state{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto;
+    padding:4px 11px;border-radius:999px;font-size:11px;font-weight:800;
+    border:1px solid var(--line-strong);background:var(--surface);color:var(--muted)}
+  .ac2-state.on{color:var(--positive-strong);background:var(--positive-pale);
+    border-color:color-mix(in srgb,var(--positive) 40%,var(--line))}
+  .ac2-state.probe{color:var(--muted);background:var(--surface-soft)}
+  .ac2-facts{display:flex;gap:6px;flex-wrap:wrap}
+  .ac2-facts span{padding:3px 10px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface-soft);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .ac2-facts b{color:var(--ink);font-weight:600}
+  .ac2-now{padding:9px 12px;border-radius:0 11px 11px 0;border-left:3px solid var(--accent);
+    background:color-mix(in srgb,var(--accent) 7%,var(--surface));font-size:12.5px;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ac2-btns{margin-top:auto;display:grid;gap:8px}
+  .ac2-main{width:100%;min-height:46px;font-weight:700;font-size:14.5px;border-radius:13px;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .ac2-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .ac2-row button{min-height:40px;padding:9px 4px;font-size:12.5px;border-radius:11px;color:var(--muted)}
+  .ac2-row button:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+  .agent-card2{display:flex;flex-direction:column;gap:11px}
+  .duty-list{display:grid;gap:0}
+  .duty-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:start;
+    padding:13px 0;border-top:1px dashed var(--line)}
+  .duty-row:first-child{border-top:0}
+  .duty-name{display:inline-flex;align-items:center;gap:9px;font-weight:700;white-space:nowrap;font-size:13.5px}
+  .duty-dot{width:11px;height:11px;border-radius:4px;background:var(--accent);flex:none}
+  .duty-copy{color:var(--muted);font-size:13px;line-height:1.55}
+  .duty-copy b{color:var(--positive-strong);font-weight:600}
+  .duty-copy s{color:var(--danger);text-decoration:none;font-weight:600}
+
+  /* ---------- 插件舱 ---------- */
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{padding:4px 11px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface-soft);
+    font-size:12px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+  .code-bar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;border-radius:12px;
+    background:var(--ink-deep);color:#e8f4ee;font-family:Consolas,"Courier New",monospace;font-size:13px}
+  .code-bar button{padding:6px 12px;min-height:34px;font-size:12.5px;color:#e8f4ee;
+    border-color:transparent;background:color-mix(in srgb,#fffaf3 12%,transparent)}
+  .spacer{flex:1}
+
+  /* ---------- 细节打磨 ---------- */
+  .panel{transition:box-shadow 200ms ease, border-color 200ms ease}
+  .recent-note{transition:transform 180ms ease, box-shadow 180ms ease}
+  .recent-note:hover{transform:translateY(-2px) rotate(0deg);box-shadow:0 12px 26px rgba(22,59,61,.10)}
+  .progress-fill{transition:transform 500ms ease}
+  .chip{transition:transform 160ms ease, border-color 160ms ease}
+  .chip:hover{border-color:var(--positive);transform:translateY(-1px)}
+  .kpi-value,.record-amount,.formula-row dd{font-variant-numeric:tabular-nums}
+  .panel-title .app-icon{width:20px;height:20px}
+  .formula-row{padding:12px 0}
+
+  /* ---------- 移动底栏 / toast ---------- */
+  .mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:30;display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line-strong);background:color-mix(in srgb,var(--surface-raised) 96%,transparent)}
+  .mobile-nav button{display:grid;place-items:center;align-content:center;gap:2px;min-width:0;min-height:52px;
+    padding:5px 2px;border-color:transparent;border-radius:10px;background:transparent;font-size:11px}
+  .mobile-nav button.active{color:var(--positive-strong);background:var(--positive-pale)}
+  .mobile-nav .app-icon{width:19px;height:19px}
+  .toast{position:fixed;right:22px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:60;
+    max-width:min(360px,calc(100vw - 32px));padding:12px 17px;border-radius:14px;background:var(--ink-deep);
+    color:#fffaf3;font-size:13.5px;box-shadow:0 10px 30px rgba(22,59,61,.28)}
+  .toast.err{background:var(--danger)}
+
+  /* ---------- 弹层 / 绑定列表 / 任务勾选（JS 动态渲染用） ---------- */
+  .hidden{display:none !important}
+  .usage-bars{display:grid;gap:9px;margin-top:10px}
+  .usage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
+  .usage-row .u-label{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap}
+  .usage-row .progress-track{height:10px}
+  .usage-row .u-pct{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .usage-fill.warn{background:var(--warning)}
+  .usage-fill.hot{background:var(--danger)}
+  .mask{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px;
+    background:color-mix(in srgb,var(--ink-deep) 42%,transparent)}
+  .modal{width:min(520px,100%);max-height:min(72vh,640px);overflow:auto;padding:20px 22px;
+    border-radius:18px;border:1px solid var(--line-strong);background:var(--surface-raised);
+    box-shadow:0 24px 60px rgba(22,59,61,.25)}
+  .modal h3{margin:0 0 6px;font-size:17px;letter-spacing:-.02em}
+  .modal .sub{color:var(--muted);font-size:13px;line-height:1.55;margin-bottom:14px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .modal-actions button{min-height:40px}
+  .wlist{display:grid;gap:6px;max-height:320px;overflow:auto}
+  .witem{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);
+    border-radius:11px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:var(--ink-deep)}
+  .witem:hover{border-color:var(--positive);background:var(--positive-pale)}
+  .wp{font-variant-numeric:tabular-nums;font-size:11.5px;font-weight:800;color:var(--muted);
+    background:var(--surface-soft);border:1px solid var(--line);border-radius:8px;
+    padding:2px 8px;flex:none;white-space:nowrap}
+  .wt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .chk{width:28px;height:28px;min-height:28px;min-width:28px;padding:0;border-radius:50%;flex:none;
+    display:inline-flex;align-items:center;justify-content:center}
+  .chk:hover{border-color:var(--positive)}
+  .chk.on{background:var(--positive);border-color:var(--positive)}
+
+  @media (min-width:640px){
+    .main{padding-right:24px;padding-left:24px}
+    .form-grid.two-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+  }
+  @media (min-width:768px){
+    .sidebar{display:block}
+    .main{margin-left:var(--sidebar);width:calc(100% - var(--sidebar));padding:32px 34px 50px}
+    .mobile-nav,.mobile-tools{display:none}
+    .menu-button{display:none}
+    .grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (min-width:1024px){
+    .form-grid.three-cols{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .grid.dashboard{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);align-items:start}
+    .dashboard-form-card{position:sticky;top:24px}
+  }
+  @media (max-width:767px){
+    .hero-heading{align-items:flex-start}
+    .hero-illustration{width:132px}
+    .toast{right:16px;bottom:calc(82px + env(safe-area-inset-bottom))}
+  }
+  @media (max-width:639px){
+    .main{padding-top:14px;padding-right:12px;padding-left:12px}
+    .topbar{align-items:flex-start}
+    .topbar-copy p{font-size:13px}
+    .theme-button span{display:none}
+    .hero-heading{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:8px}
+    .hero-illustration{width:100%}
+    .recent-grid{gap:8px}
+    .panel,.recent-section{padding:17px}
+    .kpi-value{font-size:clamp(1.75rem,8.5vw,2.25rem);font-weight:600}
+    .mobile-tools{gap:6px}
+    .mobile-tools button{padding:7px 4px;font-size:12px}
+    .mobile-tools .app-icon{width:17px;height:17px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{scroll-behavior:auto !important;animation-duration:.01ms !important;transition-duration:.01ms !important}
+  }
+</style>
+</head>
+<body>
+
+<svg class="icon-sprite" aria-hidden="true">
+  <symbol id="i-dashboard" viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 7h6V4h-6z"/></symbol>
+  <symbol id="i-hub" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4M5 5l3 3m8 8l3 3m0-14l-3 3m-8 8l-3 3"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3.5h12v17l-3-1.8-3 1.8-3-1.8-3 1.8zM9 8h6M9 12h6"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 2v6m0 8v6M2 12h6m8 0h6"/><circle cx="12" cy="12" r="3.2"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 15.5A8 8 0 0 1 8.5 4.5a8 8 0 1 0 11 11z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-4-4 4 4 4-4M5 19h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M8 9l4-4 4 4M5 19h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3m2 0-1 13H8L7 7m3 4v5m4-5v5"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7zM18.5 16l.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7z"/></symbol>
+  <symbol id="i-form" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h5M8 16h7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M5 15c-1.5 1.5-2 6-2 6s4.5-.5 6-2c.8-.8.8-2.2 0-3s-2.2-.8-3 0Z"/><path d="M15 5c2-2 6-2.5 6-2.5S20.5 7 18.5 9c-1 1-2.5 1-3.5 0s-1-2.5 0-3.5Z"/><path d="M9.5 14.5 5 19m5-13.5L14.5 10"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-buddy" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="M8 21h8M12 18v3M9 10l2 2 4-4"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 6 3 12l5 6M16 6l5 6-5 6M14 4l-4 16"/></symbol>
+  <symbol id="i-acp" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-4 3v-5.5A8 8 0 0 1 11 4a8 8 0 0 1 10 8z"/><path d="M9 10h.01M13 10h.01M17 10h.01"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-task" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8.5 12.5 2.4 2.4L15.8 9.5"/></symbol>
+  <symbol id="i-empty" viewBox="0 0 24 24"><path d="M4.5 7.5 6.8 4h10.4l2.3 3.5M4.5 7.5h15V20h-15zM9.5 12h5"/></symbol>
+  <symbol id="i-plugin" viewBox="0 0 24 24"><path d="M9 3v4m6-4v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></symbol>
+</svg>
+
+<div class="app-shell">
+
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" class="app-icon"><use href="#i-hub"/></svg></div>
+      <h1>智能体指挥台</h1>
+      <p>一个编排者，三个员工</p>
+    </div>
+    <nav id="desktop-nav" class="nav-list">
+      <button class="nav-button active" type="button" data-target="console"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-dashboard"/></svg><span>今日指挥舱</span></button>
+      <button class="nav-button" type="button" data-target="agents"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg><span>智能体模块</span></button>
+      <button class="nav-button" type="button" data-target="tasks"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>任务派发</span></button>
+      <button class="nav-button" type="button" data-target="plugins"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-plug"/></svg><span>插件舱</span></button>
+    </nav>
+    <div class="sidebar-footer">
+      <button type="button" data-act="export"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-download"/></svg><span>导出 JSON</span></button>
+      <button type="button" data-act="import"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-upload"/></svg><span>导入 JSON</span></button>
+      <button class="ghost" type="button" data-act="clear"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-trash"/></svg><span>清空示例</span></button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menu-button" class="menu-button" type="button" aria-label="打开导航"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-menu"></use></svg></button>
+      <div class="topbar-copy">
+        <h2 id="page-title">今日指挥舱</h2>
+        <p id="today-label">2026年9月8日 星期二</p>
+      </div>
+      <div class="topbar-side">
+        <button id="pet-button" class="pet-button" type="button" aria-label="鲸鱼娘宠物" title="显示 / 隐藏鲸鱼娘"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-spark"/></svg></button>
+        <span class="status-chip"><i class="led-dot wait" id="dotBridge"></i><span id="txtBridge">连接中</span></span>
+        <span class="status-chip" title="窗口标题/置顶依赖系统接口，被策略拦截时自动降级为按 PID 置顶">
+          <i class="led-dot wait" id="dotWin"></i><span id="txtWin">窗口探测</span></span>
+      </div>
+      <button id="theme-button" class="theme-button" type="button" aria-label="切换深色">
+        <svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-moon"/></svg><span id="theme-label">切换深色</span>
+      </button>
+    </header>
+
+    <div id="storage-alert" class="storage-alert" role="alert" hidden></div>
+    <div id="top-reminder" class="top-reminder" role="status">
+      今天有 <b>3 项</b> 待处理，其中 <b style="color:var(--danger)">1 项已逾期</b>。逾期项会自动顺延，不会凭空消失。
+    </div>
+
+    <div class="mobile-tools" aria-label="手机数据工具">
+      <button type="button" data-act="export"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-download"/></svg><span>导出</span></button>
+      <button type="button" data-act="import"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-upload"/></svg><span>导入</span></button>
+      <button class="ghost" type="button" data-act="clear"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-trash"/></svg><span>清示例</span></button>
+    </div>
+
+    <div class="workspace">
+
+      <!-- ============ 今日指挥舱 ============ -->
+      <section class="page-section active" data-section="console" aria-labelledby="console-title">
+        <div class="section-heading hero-heading">
+          <div class="hero-copy">
+            <h2 id="console-title">今天也要派清楚</h2>
+            <p>不是为了多开几个窗口，而是让每个智能体只干它最擅长的那件事，你在中间拍板。</p>
+          </div>
+          <div class="hero-illustration" role="img" aria-label="一个中枢连接三个智能体节点的星型结构">
+            <svg viewBox="0 0 260 170" aria-hidden="true">
+              <path d="M22 132c18-31 45-45 82-41 33-39 88-34 109 3 22 5 34 18 35 38z" fill="var(--positive-pale)"/>
+              <circle cx="196" cy="40" r="19" fill="var(--sun-pale)" stroke="var(--sun)" stroke-width="4"/>
+              <path d="M196 29v22m-7-16c2-4 12-4 13 1 1 7-13 3-13 10 0 5 10 6 14 1" fill="none" stroke="var(--warning)" stroke-width="3" stroke-linecap="round"/>
+              <path d="M130 80 88 58M130 80l48-20M130 80v34" stroke="var(--line-strong)" stroke-width="3" stroke-dasharray="5 7" stroke-linecap="round" fill="none"/>
+              <circle cx="88" cy="56" r="16" fill="var(--coral-pale)" stroke="var(--coral)" stroke-width="4"/>
+              <circle cx="180" cy="58" r="16" fill="var(--sun-pale)" stroke="var(--warning)" stroke-width="4"/>
+              <circle cx="130" cy="118" r="16" fill="var(--blue-pale)" stroke="var(--blue)" stroke-width="4"/>
+              <circle cx="130" cy="80" r="23" fill="var(--surface)" stroke="var(--positive)" stroke-width="4"/>
+              <circle cx="130" cy="80" r="7" fill="var(--positive)"/>
+              <path d="M32 145h202" stroke="var(--line-strong)" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="grid dashboard">
+          <div class="grid">
+            <div class="grid two">
+              <article class="panel featured mint sticker">
+                <div class="kpi-head"><div class="kpi-label">在线智能体</div>
+                  <span class="icon-base positive"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg></span></div>
+                <div id="kpiOnline" class="kpi-value positive">3 / 5</div>
+                <div id="kpiOnlineNote" class="kpi-note">ChatGPT、OpenCode ACP 未启动</div>
+              </article>
+              <article class="panel coral">
+                <div class="kpi-head"><div class="kpi-label">待处理任务</div>
+                  <span class="icon-base expense-color"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg></span></div>
+                <div id="kpiTasks" class="kpi-value expense-color">5 项</div>
+                <div id="kpiTasksNote" class="kpi-note">其中 1 项逾期 · 1 项进行中</div>
+              </article>
+            </div>
+
+            <article class="panel sun">
+              <div class="kpi-head"><div class="kpi-label">今日完成率</div>
+                <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-target"/></svg></span></div>
+              <div id="kpiDone" class="kpi-value positive">40%</div>
+              <div class="progress-track" aria-hidden="true"><div id="kpiDoneBar" class="progress-fill" style="transform:scaleX(.4)"></div></div>
+              <p id="kpiDoneNote" class="kpi-note">已完成 2 项，还剩 3 项</p>
+            </article>
+
+            <article class="panel featured sticker">
+              <div class="kpi-head"><div class="kpi-label">OpenCode Go 用量</div>
+                <span class="icon-base positive"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-target"/></svg></span></div>
+              <div id="usageBars" class="usage-bars"><span class="subtle" style="font-size:13px">读取中…</span></div>
+              <p id="usageNote" class="kpi-note" style="margin-top:8px"></p>
+            </article>
+
+            <article class="panel soft">
+              <h3 class="panel-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-spark"/></svg><span>指挥原则</span></h3>
+              <p style="margin:0">员工之间不互相打电话。所有派发经过你，输出必须结构化，知识放在文件里而不是提示词里。</p>
+            </article>
+
+            <section class="recent-section" aria-labelledby="recent-title">
+              <div class="recent-heading">
+                <h3 id="recent-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-alert"/></svg><span>今天要处理</span></h3>
+                <button class="secondary" type="button" data-target="tasks">查看全部</button>
+              </div>
+              <div class="recent-grid" id="todayList"></div>
+            </section>
+          </div>
+
+          <aside class="panel dashboard-form-card sticker">
+            <h3 class="panel-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-form"/></svg><span>现在派一个</span></h3>
+            <form class="form-grid" id="dispatchForm">
+              <div class="field"><label for="q-title">任务标题</label>
+                <input id="q-title" type="text" placeholder="例如：核对 5 月水费发票三个账号"></div>
+              <div class="field"><label for="q-agent">指派给</label>
+                <select id="q-agent">
+                  <option value="workbuddy">WorkBuddy · 指挥台</option>
+                  <option value="opencode">OpenCode · 开发台</option>
+                  <option value="opencode-acp">OpenCode ACP · 调度接口</option>
+                  <option value="dsh">DeepSeek Harness · 能力扩展台</option>
+                  <option value="chatgpt">ChatGPT · 外网参谋</option>
+                </select></div>
+              <div class="field"><label for="q-due">截止</label><input id="q-due" type="date" value="2026-09-08"></div>
+              <button class="primary" type="submit">派发并唤起</button>
+            </form>
+            <p class="subtle">派发后：OpenCode 会真执行（弹独立执行窗口）；其余智能体自动置顶并把任务放进剪贴板，到窗口 Ctrl+V 回车即可下发。</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ 智能体模块 ============ -->
+      <section class="page-section" data-section="agents" aria-labelledby="agents-title">
+        <div class="section-heading">
+          <div><h2 id="agents-title">智能体模块</h2>
+            <p>点主按钮即唤起并置顶。每个员工只干它最擅长的事，长处和短板都写在明面上。</p></div>
+        </div>
+        <div class="agent-grid" id="agentGrid"></div>
+
+        <section class="recent-section" style="margin-top:18px">
+          <div class="recent-heading">
+            <h3><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-spark"></use></svg><span>分工一览</span></h3>
+            <span class="panel-note">长处 → 派什么活；短板 → 别派什么活</span>
+          </div>
+          <div class="duty-list" id="dutyList"></div>
+        </section>
+      </section>
+
+      <!-- ============ 任务派发 ============ -->
+      <section class="page-section" data-section="tasks" aria-labelledby="tasks-title">
+        <div class="section-heading">
+          <div><h2 id="tasks-title">任务派发</h2>
+            <p>每条任务只归属一个智能体。派发时会自动把它的窗口置顶。</p></div>
+        </div>
+        <div class="grid two">
+          <article class="panel sticker">
+            <h3 class="panel-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>全部任务</span></h3>
+            <div class="record-list" id="taskList"></div>
+          </article>
+
+          <div class="grid">
+            <article class="panel">
+              <div id="kpiWeekLabel" class="kpi-label">本周派发</div>
+              <div id="kpiWeek" class="kpi-value">12 次</div>
+              <p id="kpiWeekNote" class="subtle">WorkBuddy 7 · OpenCode 4 · dsh 1</p>
+            </article>
+            <article class="panel soft">
+              <h3 class="panel-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-spark"/></svg><span>输出契约</span></h3>
+              <p style="margin:0 0 10px">每个员工交回来的东西必须带这五样，否则打回：</p>
+              <dl class="formula-list">
+                <div class="formula-row"><dt>任务 ID</dt><dd>可追溯</dd></div>
+                <div class="formula-row"><dt>状态</dt><dd>todo / doing / done</dd></div>
+                <div class="formula-row"><dt>结论</dt><dd>不超过 3 行</dd></div>
+                <div class="formula-row"><dt>证据与数据源</dt><dd>必须标注</dd></div>
+                <div class="formula-row"><dt>待你决策的问题</dt><dd>可以为空</dd></div>
+              </dl>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 插件舱 ============ -->
+      <section class="page-section" data-section="plugins" aria-labelledby="plugins-title">
+        <div class="section-heading">
+          <div><h2 id="plugins-title">DeepSeek Harness 插件舱</h2>
+            <p>dsh 的能力边界由插件决定。它不是一个普通聊天窗口，是一个可生长的运行时。</p></div>
+          <button class="secondary" type="button" data-act="focus" data-id="dsh">唤起 dsh</button>
+        </div>
+        <div class="grid two">
+          <article class="panel sticker">
+            <h3 class="panel-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-plug"/></svg><span>已安装 <span id="cntPlugins">13</span> 个插件包</span></h3>
+            <div class="chips" id="pluginChips"></div>
+            <div class="code-bar">
+              <span id="dshCmd">dsh plugin --profile web add &lt;包名&gt;</span>
+              <span class="spacer"></span>
+              <button type="button" id="btnCopy"><svg viewBox="0 0 24 24" class="app-icon" style="width:15px;height:15px" aria-hidden="true"><use href="#i-form"/></svg> 复制</button>
+            </div>
+            <p class="form-hint" style="margin-top:12px">装包后重启 <b>dsh --profile web</b> 生效。dsh 当前监听 127.0.0.1:3080。</p>
+          </article>
+
+          <div class="grid">
+            <article class="panel mint">
+              <div class="kpi-label">运行时状态</div>
+              <div id="dshState" class="kpi-value positive">在线</div>
+              <p id="dshStateNote" class="subtle">PID 4520 · 启动于 2026-09-06</p>
+            </article>
+            <article class="panel">
+              <h3 class="panel-title"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-warn"/></svg><span>它的短板</span></h3>
+              <p style="margin:0">dsh 没有 CLI 非交互入口，只能走 Web UI 或人工点击。所以它适合当「能力扩展台」，不适合当被脚本调度的 worker。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div id="nav-backdrop" class="nav-backdrop"></div>
+
+<nav id="mobile-nav" class="mobile-nav" aria-label="移动端主导航">
+  <button class="active" type="button" data-target="console"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-dashboard"/></svg><span>指挥舱</span></button>
+  <button type="button" data-target="agents"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg><span>智能体</span></button>
+  <button type="button" data-target="tasks"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>任务</span></button>
+  <button type="button" data-target="plugins"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-plug"/></svg><span>插件</span></button>
+</nav>
+
+<div id="toastHost"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var S = { agents: [], tasks: [], dsh: { bundles: [] }, today: '', ok: false, dshCmd: '', bridge: null, offline: false };
+  var ICON = { workbuddy: 'i-buddy', opencode: 'i-code', 'opencode-acp': 'i-acp', dsh: 'i-plugin', chatgpt: 'i-chat' };
+  var TITLES = { console: '今日指挥舱', agents: '智能体模块', tasks: '任务派发', plugins: '插件舱' };
+
+  /* 本地模式（file:// 直开）兜底数据：智能体档案，状态不可探测 */
+  var FALLBACK_AGENTS = [
+    { id: 'workbuddy', name: 'WorkBuddy', subtitle: '指挥台', role: '编排者 · 股票复盘 · 资料库 · 通达信数据', kind: 'app', color: '#5c88b8', strength: '唯一编排者。有通达信连接器、资料库，适合做派发中枢', caveat: '' },
+    { id: 'opencode', name: 'OpenCode', subtitle: '开发台', role: '宜搭 smart-reimburse · 脚本 · 代码重构', kind: 'tui', color: '#163b3d', strength: '可被脚本调度：opencode run「任务」--format json', caveat: 'TUI 交互式，适合需要来回确认的活' },
+    { id: 'opencode-acp', name: 'OpenCode ACP', subtitle: '调度接口', role: '后台服务 · 让别的客户端驱动 opencode', kind: 'service', color: '#9a6a18', port: 8899, strength: 'Agent Client Protocol 标准接口，是跨智能体派活的正规通道', caveat: '无窗口，只有端口状态' },
+    { id: 'dsh', name: 'DeepSeek Harness', subtitle: '能力扩展台', role: '插件运行时 · dshmarket 市场 · 能力突破', kind: 'web', color: '#d95f5f', url: 'http://127.0.0.1:3080', port: 3080, strength: '可装插件突破能力边界：dsh plugin --profile web add <包名>', caveat: '无 CLI 非交互入口，只能走 Web UI 或人工操作' },
+    { id: 'chatgpt', name: 'ChatGPT', subtitle: '外网参谋', role: '通用推理 · 长文写作 · 外网检索 · 交叉验证', kind: 'app', color: '#10a37f', strength: '通用能力最强，适合要「第二意见」、写长文、查外网资料', caveat: '不接本地文件系统，拿不到你的项目上下文。别让它直接改代码' }
+  ];
+  function localToday() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function localTasks() {
+    try { return JSON.parse(localStorage.getItem('wb_agent_console_tasks') || '[]'); } catch (e) { return []; }
+  }
+  function saveLocalTasks() {
+    try { localStorage.setItem('wb_agent_console_tasks', JSON.stringify(S.tasks)); } catch (e) { }
+  }
+
+  /* ---------------- 基础 ---------------- */
+  function api(path, opts) {
+    return fetch(path, opts).then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false, reason: 'offline' }; });
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function svg(id, cls) { return '<svg class="' + (cls || 'app-icon') + '"><use href="#' + id + '"/></svg>'; }
+  function tint(c) { return 'color:' + c + ';background:color-mix(in srgb,' + c + ' 14%,var(--surface))'; }
+  function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+  function ensure(id) {
+    var el = document.getElementById(id);
+    if (!el) { el = document.createElement('div'); el.id = id; document.body.appendChild(el); }
+    return el;
+  }
+  function agentOf(id) { return S.agents.filter(function (x) { return x.id === id; })[0]; }
+  function agentName(id) { var a = agentOf(id); return a ? a.name : id; }
+  function agentColor(id) { var a = agentOf(id); return a && a.color ? a.color : '#708786'; }
+  function iconOf(id) { return ICON[id] || 'i-hub'; }
+  function toast(msg, isErr) {
+    var host = ensure('toastHost');
+    host.innerHTML = '<div class="toast' + (isErr ? ' err' : '') + '">' + esc(msg) + '</div>';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { host.innerHTML = ''; }, 3800);
+  }
+  function bucketOf(t) {
+    if (!S.today) return 'future';
+    if (t.due < S.today) return 'over';
+    if (t.due === S.today) return 'today';
+    return 'future';
+  }
+  function daysOver(t) {
+    if (!S.today || t.due >= S.today) return 0;
+    return Math.round((new Date(S.today) - new Date(t.due)) / 86400000);
+  }
+  function post(path, body) {
+    return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
+
+  /* ---------------- 视图切换 / 主题 / 侧栏 ---------------- */
+  function setSection(target) {
+    if (!TITLES[target]) return;
+    var i, list = document.querySelectorAll('.page-section');
+    for (i = 0; i < list.length; i++) {
+      list[i].classList.toggle('active', list[i].getAttribute('data-section') === target);
+    }
+    list = document.querySelectorAll('[data-target]');
+    for (i = 0; i < list.length; i++) {
+      if (TITLES[list[i].getAttribute('data-target')]) {
+        list[i].classList.toggle('active', list[i].getAttribute('data-target') === target);
+      }
+    }
+    document.getElementById('page-title').textContent = TITLES[target];
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function setNav(open) {
+    var sb = document.querySelector('.sidebar');
+    var bd = document.getElementById('nav-backdrop');
+    if (sb) sb.classList.toggle('open', open);
+    if (bd) bd.classList.toggle('show', open);
+  }
+  function setTheme(mode) {
+    document.documentElement.setAttribute('data-theme', mode);
+    var lb = document.getElementById('theme-label');
+    if (lb) lb.textContent = mode === 'dark' ? '切换浅色' : '切换深色';
+    try { localStorage.setItem('wb_agent_console_theme', mode); } catch (e) { }
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function renderBridge() {
+    var dot = document.getElementById('dotBridge');
+    if (!dot) return;
+    if (S.offline) {
+      dot.className = 'led-dot wait';
+      setText('txtBridge', '本地模式 · 任务存浏览器');
+      var dwx = document.getElementById('dotWin');
+      if (dwx) dwx.className = 'led-dot off';
+      setText('txtWin', '窗口功能未连接');
+      return;
+    }
+    dot.className = 'led-dot ' + (S.ok ? 'on' : 'off');
+    setText('txtBridge', S.ok ? '桥接在线' : '桥接离线');
+    var wp = S.bridge ? S.bridge.windowProbe : 'unknown';
+    var dw = document.getElementById('dotWin');
+    if (dw) dw.className = 'led-dot ' + (wp === 'powershell' ? 'on' : (wp === 'blocked' ? 'wait' : 'off'));
+    setText('txtWin', wp === 'powershell' ? '窗口探测可用'
+      : (wp === 'blocked' ? '窗口探测被拦截 · 按 PID 置顶' : '窗口探测不可用'));
+  }
+
+  function renderKpis() {
+    var open = S.tasks.filter(function (t) { return t.status !== 'done'; });
+    var over = open.filter(function (t) { return bucketOf(t) === 'over'; });
+    var doing = open.filter(function (t) { return t.status === 'doing'; });
+    var done = S.tasks.length - open.length;
+    var pct = S.tasks.length ? Math.round(done / S.tasks.length * 100) : 0;
+
+    setText('kpiOnline', S.agents.filter(function (a) { return a.running; }).length + ' / ' + S.agents.length);
+    var off = S.agents.filter(function (a) { return !a.running; }).map(function (a) { return a.name; });
+    setText('kpiOnlineNote', off.length ? off.join('、') + ' 未启动' : '全部在线');
+    setText('kpiTasks', open.length + ' 项');
+    setText('kpiTasksNote', '其中 ' + over.length + ' 项逾期 · ' + doing.length + ' 项进行中');
+    setText('kpiDone', pct + '%');
+    var bar = document.getElementById('kpiDoneBar');
+    if (bar) bar.style.transform = 'scaleX(' + (pct / 100) + ')';
+    setText('kpiDoneNote', '已完成 ' + done + ' 项，共 ' + S.tasks.length + ' 项');
+
+    var rem = document.getElementById('top-reminder');
+    if (rem) {
+      rem.innerHTML = open.length
+        ? '今天有 <b>' + open.length + ' 项</b>待处理，其中 <b style="color:var(--danger)">' + over.length + ' 项已逾期</b>。逾期项会自动顺延，不会凭空消失。'
+        : '当前没有待处理任务，去「任务派发」加一条吧。';
+    }
+  }
+
+  function renderToday() {
+    var box = document.getElementById('todayList');
+    if (!box) return;
+    var list = S.tasks.filter(function (t) { return t.status !== 'done' && bucketOf(t) !== 'future'; })
+      .sort(function (a, b) { return a.due < b.due ? -1 : 1; });
+    if (!list.length) {
+      box.innerHTML = '<div class="empty-state" style="grid-column:1/-1">' + svg('i-empty') + '<div>今天没有待处理事项</div></div>';
+      return;
+    }
+    box.innerHTML = list.map(function (t) {
+      var b = bucketOf(t), c = agentColor(t.agent);
+      var meta = b === 'over'
+        ? '<span style="color:var(--danger);font-weight:700">逾期 ' + daysOver(t) + ' 天</span> · ' + esc(t.due)
+        : '截止今天';
+      return '<article class="recent-note' + (b === 'over' ? ' over' : '') + '">'
+        + '<span class="category-icon" style="' + tint(b === 'over' ? 'var(--danger)' : 'var(--warning)') + '">'
+        + svg(b === 'over' ? 'i-alert' : 'i-task') + '</span>'
+        + '<div class="recent-copy"><div class="record-title">' + esc(t.title) + '</div>'
+        + '<div class="record-meta"><span style="color:' + c + ';font-weight:700">' + esc(agentName(t.agent)) + '</span> · ' + meta + '</div></div>'
+        + '<button class="recent-btn" data-act="focus" data-id="' + esc(t.agent) + '">唤起</button>'
+        + '</article>';
+    }).join('');
+  }
+
+  function agentFacts(a) {
+    var f = [];
+    if (a.portUp && a.port) f.push('端口 <b>' + a.port + '</b> 在线');
+    if (a.procCount) f.push('进程 <b>' + a.procCount + '</b> 个');
+    if (a.windowTitle) f.push('窗口在线');
+    if (a.pid) f.push('PID <b>' + a.pid + '</b>');
+    if (a.bound) f.push('已绑定');
+    if (!f.length) f.push(S.offline ? '本地模式 · 状态未探测' : '未启动');
+    return f;
+  }
+
+  function renderAgents() {
+    var box = document.getElementById('agentGrid');
+    if (!box) return;
+    box.innerHTML = S.agents.map(function (a) {
+      var primary = a.kind === 'service' ? '启动服务' : (a.running ? '唤起并置顶' : '启动并置顶');
+      return '<article class="panel agent-card2 sticker" style="--accent:' + esc(a.color) + '" data-agent="' + esc(a.id) + '">'
+        + '<div class="ac2-top">'
+        + '<span class="ac2-mark">' + svg(iconOf(a.id)) + '</span>'
+        + '<div class="ac2-id"><div class="ac2-name">' + esc(a.name)
+        + '<span class="ac2-sub">' + esc(a.subtitle) + '</span></div>'
+        + '<div class="ac2-role">' + esc(a.role) + '</div></div>'
+        + '<span class="ac2-state' + (a.running ? ' on' : (S.offline ? ' probe' : '')) + '">'
+        + '<i class="led-dot ' + (a.running ? 'on' : (S.offline ? 'wait' : 'off')) + '"></i>'
+        + (a.running ? '运行中' : (S.offline ? '未探测' : '未启动')) + '</span>'
+        + '</div>'
+        + '<div class="ac2-facts">' + agentFacts(a).map(function (x) { return '<span>' + x + '</span>'; }).join('') + '</div>'
+        + '<div class="ac2-now" title="' + esc(a.currentTask || '') + '">当前 · ' + esc(a.currentTask || '暂无任务') + '</div>'
+        + '<div class="ac2-btns">'
+        + '<button class="primary ac2-main" type="button" data-act="' + (a.running ? 'focus' : 'launch')
+        + '" data-id="' + esc(a.id) + '">' + svg('i-target') + esc(primary) + '</button>'
+        + '<div class="ac2-row">'
+        + '<button type="button" data-act="launch" data-id="' + esc(a.id) + '">启动</button>'
+        + '<button type="button" data-act="bind" data-id="' + esc(a.id) + '">绑定</button>'
+        + '<button type="button" data-act="refresh" data-id="' + esc(a.id) + '">刷新</button>'
+        + '</div></div></article>';
+    }).join('');
+
+    var duty = document.getElementById('dutyList');
+    if (duty) {
+      duty.innerHTML = S.agents.map(function (a) {
+        return '<div class="duty-row" style="--accent:' + esc(a.color) + '">'
+          + '<span class="duty-name"><i class="duty-dot"></i>' + esc(a.name) + '</span>'
+          + '<span class="duty-copy"><b>长处</b> ' + esc(a.strength || '—')
+          + (a.caveat ? ' · <s>短板</s> ' + esc(a.caveat) : '') + '</span></div>';
+      }).join('');
+    }
+  }
+
+  function renderTasks() {
+    var box = document.getElementById('taskList');
+    if (!box) return;
+    if (!S.tasks.length) {
+      box.innerHTML = '<div class="empty-state">' + svg('i-empty') + '<div>还没有任务，用上面的表单派发第一条</div></div>';
+      return;
+    }
+    var order = { doing: 0, todo: 1, done: 2 };
+    var list = S.tasks.slice().sort(function (a, b) {
+      return (order[a.status] - order[b.status]) || (a.due < b.due ? -1 : 1);
+    });
+    box.innerHTML = list.map(function (t) {
+      var c = agentColor(t.agent), b = bucketOf(t);
+      var meta = '<span style="color:' + c + ';font-weight:700">' + esc(agentName(t.agent)) + '</span>'
+        + ' · 截止 ' + esc(t.due)
+        + (t.status === 'doing' ? ' · <b style="color:var(--warning)">进行中</b>' : '')
+        + (t.status === 'done' ? ' · 已完成' : (b === 'over' ? ' · <b style="color:var(--danger)">逾期</b>' : ''));
+      return '<div class="record-card' + (t.status === 'done' ? ' done' : '') + '">'
+        + '<span class="category-icon" style="' + tint(c) + '">' + svg(iconOf(t.agent)) + '</span>'
+        + '<div><div class="record-title">' + esc(t.title) + '</div>'
+        + '<div class="record-meta">' + meta + '</div></div>'
+        + '<div class="record-actions">'
+        + '<button class="chk' + (t.status === 'done' ? ' on' : '') + '" data-act="done" data-id="' + esc(t.id) + '" aria-label="切换完成">'
+        + (t.status === 'done' ? '<svg class="app-icon" style="width:14px;height:14px;stroke:#fffaf3;stroke-width:3"><use href="#i-check"/></svg>' : '')
+        + '</button>'
+        + '<button class="secondary" data-act="dispatch" data-id="' + esc(t.id) + '">派发</button>'
+        + '<button class="ghost" data-act="del" data-id="' + esc(t.id) + '">' + svg('i-trash') + '</button>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function renderWeek() {
+    var doing = S.tasks.filter(function (t) { return t.status === 'doing'; });
+    setText('kpiWeekLabel', '进行中');
+    setText('kpiWeek', doing.length + ' 项');
+    var by = {};
+    doing.forEach(function (t) { var k = agentName(t.agent); by[k] = (by[k] || 0) + 1; });
+    var note = Object.keys(by).map(function (k) { return k + ' ' + by[k]; }).join(' · ');
+    setText('kpiWeekNote', note || '暂无进行中的任务');
+  }
+
+  function renderDsh() {
+    var box = document.getElementById('pluginChips');
+    var b = (S.dsh && S.dsh.bundles) || [];
+    if (box) box.innerHTML = b.length
+      ? b.map(function (x) { return '<span class="chip">' + esc(x) + '</span>'; }).join('')
+      : '<span style="font-size:13px;color:var(--muted)">读取不到 dsh 插件清单（检查 ~/.dsh/profiles/web/package.json）</span>';
+    if (S.dshCmd) setText('dshCmd', S.dshCmd);
+    setText('cntPlugins', String(b.length));
+    var d = agentOf('dsh');
+    if (S.offline) {
+      setText('dshState', '未知');
+      setText('dshStateNote', '本地模式未连接桥接，无法探测 dsh 状态');
+    } else {
+      setText('dshState', d && d.running ? '在线' : '离线');
+      setText('dshStateNote', d && d.running
+        ? 'PID ' + d.pid + ' · 端口 ' + (d.port || 3080) + ' 在线'
+        : '未启动，去「智能体模块」点启动');
+    }
+  }
+
+  function renderForm() {
+    var sel = document.getElementById('q-agent');
+    if (!sel || sel.dataset.built === '1') return;
+    sel.innerHTML = S.agents.map(function (a) {
+      return '<option value="' + esc(a.id) + '">' + esc(a.name + ' · ' + a.subtitle) + '</option>';
+    }).join('');
+    sel.dataset.built = '1';
+  }
+
+  function refreshAll() {
+    renderBridge(); renderKpis(); renderToday(); renderAgents();
+    renderTasks(); renderWeek(); renderDsh(); renderForm(); renderUsage();
+  }
+
+  /* ---------------- OpenCode Go 用量 ---------------- */
+  var USAGE = { at: 0, data: null };
+  function loadUsage(force) {
+    if (!S.ok || S.offline) { renderUsage(); return; }
+    var now = Date.now();
+    if (!force && USAGE.data && now - USAGE.at < 60000) return;
+    return api('/api/usage').then(function (d) {
+      if (d && d.ok) { USAGE.data = d; USAGE.at = now; }
+      renderUsage();
+    });
+  }
+  function usageCls(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
+  function usageRow(label, u) {
+    var p = u && typeof u.percent === 'number' ? u.percent : null;
+    var fill = p === null
+      ? '<div class="progress-track" aria-hidden="true"><div class="progress-fill" style="transform:scaleX(0)"></div></div>'
+      : '<div class="progress-track" aria-hidden="true"><div class="progress-fill' + usageCls(p) + '" style="transform:scaleX(' + (p / 100) + ')"></div></div>';
+    return '<div class="usage-row"><span class="u-label">' + label + '</span>' + fill
+      + '<span class="u-pct">' + (p === null ? '—' : p + '%') + '</span></div>';
+  }
+  function renderUsage() {
+    var box = document.getElementById('usageBars');
+    if (!box) return;
+    if (!S.ok || S.offline) {
+      box.innerHTML = '<span class="subtle" style="font-size:13px">本地模式不可用，需 Tauri / 桥接在线</span>';
+      setText('usageNote', '');
+      return;
+    }
+    var d = USAGE.data;
+    if (!d || !d.usage) {
+      box.innerHTML = '<span class="subtle" style="font-size:13px">读取中…</span>';
+      setText('usageNote', '');
+      return;
+    }
+    var u = d.usage;
+    box.innerHTML = usageRow('5 小时', u.rolling) + usageRow('本周', u.weekly) + usageRow('本月', u.monthly);
+    var parts = [];
+    ['rolling', 'weekly', 'monthly'].forEach(function (k) {
+      var v = u[k];
+      if (v && typeof v.percent === 'number') parts.push(k === 'rolling' ? '5小时' : (k === 'weekly' ? '本周' : '本月') + '余 ' + (100 - v.percent) + '%');
+    });
+    setText('usageNote', parts.join(' · '));
+  }
+
+  /* ---------------- 弹层 ---------------- */
+  function closeModal() { ensure('modalHost').innerHTML = ''; }
+  function modal(title, sub, body, okLabel, onOk) {
+    var host = ensure('modalHost');
+    host.innerHTML = '<div class="mask"><div class="modal"><h3>' + title + '</h3>'
+      + '<div class="sub">' + sub + '</div>' + body
+      + '<div class="modal-actions">' + (okLabel ? '<button id="mOk">' + esc(okLabel) + '</button>' : '')
+      + '<button class="primary" id="mClose">关闭</button></div></div></div>';
+    host.querySelector('#mClose').onclick = closeModal;
+    if (okLabel) host.querySelector('#mOk').onclick = onOk;
+  }
+
+  /* ---------------- 动作 ---------------- */
+  function load() {
+    return api('/api/state').then(function (d) {
+      if (d && d.ok) {
+        S.offline = false;
+        S.ok = true;
+        S.agents = d.agents || []; S.tasks = d.tasks || [];
+        S.dsh = d.dsh || { bundles: [] }; S.today = d.today || '';
+        S.dshCmd = d.dshCmd || ''; S.bridge = d.bridge || null;
+      } else {
+        S.offline = true; S.ok = false;
+        S.agents = FALLBACK_AGENTS.map(function (a) {
+          var c = {}; for (var k in a) c[k] = a[k];
+          c.running = false; c.portUp = false; c.pid = 0; c.bound = false;
+          c.procCount = 0; c.windowTitle = ''; c.currentTask = '';
+          return c;
+        });
+        S.tasks = localTasks();
+        S.today = localToday();
+        S.dsh = { bundles: [] };
+        S.dshCmd = 'dsh plugin --profile web add <包名>';
+        S.bridge = null;
+      }
+      var snap = JSON.stringify([S.ok, S.agents, S.tasks, S.dsh, S.today, S.dshCmd, S.bridge]);
+      if (snap !== load._last) { load._last = snap; refreshAll(); }
+      loadUsage();
+    });
+  }
+
+  /* 任务操作：在线走桥接，本地模式走 localStorage */
+  function taskAction(body) {
+    if (!S.offline) return post('/api/task', body);
+    var act = body.action;
+    if (act === 'add') {
+      S.tasks.push({
+        id: 't' + Date.now().toString(36),
+        title: String(body.title || '').trim() || '未命名任务',
+        agent: body.agent || 'workbuddy',
+        due: body.due || S.today,
+        status: 'todo', note: body.note || ''
+      });
+    } else if (act === 'update') {
+      var t = null;
+      for (var i = 0; i < S.tasks.length; i++) if (S.tasks[i].id === body.id) t = S.tasks[i];
+      if (t) ['title', 'agent', 'due', 'status', 'note'].forEach(function (k) {
+        if (body[k] !== undefined) t[k] = body[k];
+      });
+    } else if (act === 'delete') {
+      S.tasks = S.tasks.filter(function (x) { return x.id !== body.id; });
+    } else if (act === 'clearSample') {
+      S.tasks = [];
+    }
+    saveLocalTasks();
+    return Promise.resolve({ ok: true, tasks: S.tasks });
+  }
+
+  function restoreData(data) {
+    if (!S.offline) return post('/api/restore', data);
+    if (!Array.isArray(data.tasks)) return Promise.resolve({ ok: false });
+    S.tasks = data.tasks;
+    saveLocalTasks();
+    return Promise.resolve({ ok: true, count: S.tasks.length });
+  }
+
+  function doExport() {
+    if (!S.offline) { window.location = '/api/backup'; return; }
+    var payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), tasks: S.tasks, bindings: {} }, null, 2);
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    a.download = 'agent-console-backup-' + localToday() + '.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  function doFocus(id, text) {
+    var a = agentOf(id);
+    if (S.offline) {
+      if (a && a.kind === 'web' && a.url) {
+        try { var w = window.open(a.url, 'ac_' + id); if (w) { w.focus(); } } catch (e) { }
+      } else if (!text) {
+        toast('本地模式无法唤起窗口，请手动打开 ' + agentName(id), true);
+      }
+      return;
+    }
+    if (a && a.kind === 'web' && a.url) {
+      try { var w2 = window.open(a.url, 'ac_' + id); if (w2) { w2.focus(); } } catch (e) { }
+    }
+    post('/api/focus', text ? { id: id, text: text } : { id: id }).then(function (r) {
+      if (text) {
+        // 派发模式：剪贴板已由服务端写入，置顶失败不算大事
+        if (r && r.ok) toast('已置顶 ' + agentName(id) + '，任务已复制，到窗口 Ctrl+V 回车即可派发');
+        else toast('任务已复制到剪贴板，请手动切到 ' + agentName(id) + ' 窗口 Ctrl+V 回车', true);
+        return;
+      }
+      if (r && r.ok) toast('已唤起 ' + agentName(id) + (r.via ? '（' + (r.via === 'com' ? 'COM' : 'P/Invoke') + '）' : ''));
+      else if (r && r.reason === 'no_target') toast('没找到目标窗口，先启动它', true);
+      else toast('唤起失败：' + ((r && r.reason) || '未知'), true);
+    });
+  }
+
+  function doLaunch(id) {
+    if (S.offline) { toast('本地模式不支持远程启动，请手动打开该智能体', true); return; }
+    post('/api/launch', { id: id }).then(function (r) {
+      if (r && r.ok) { toast('已发起启动 ' + agentName(id) + '，几秒后自动刷新'); setTimeout(load, 3500); }
+      else toast('启动失败：' + ((r && (r.detail || r.reason)) || '未知'), true);
+    });
+  }
+
+  function doBind(id) {
+    if (S.offline) { toast('本地模式不支持绑定窗口（桥接未启动）', true); return; }
+    api('/api/windows').then(function (r) {
+      var wins = (r && r.windows) || [], procs = (r && r.procs) || [];
+      var items, tip;
+      if (wins.length) {
+        tip = '点选一个窗口，之后「唤起并置顶」直接命中它。';
+        items = wins.map(function (w) {
+          return '<div class="witem" data-pid="' + w.pid + '"><span class="wp">' + w.pid + '</span>'
+            + '<span class="wt">' + esc(w.title) + ' <span class="wp">(' + esc(w.name) + ')</span></span></div>';
+        }).join('');
+      } else {
+        tip = '窗口标题探测被拦截，改按进程绑定 —— 置顶同样走 PID，效果一致。';
+        items = procs.map(function (x) {
+          return '<div class="witem" data-pid="' + x.pids[0] + '"><span class="wp">' + x.pids[0] + '</span>'
+            + '<span class="wt">' + esc(x.name) + ' <span class="wp">(' + x.pids.length + ' 个实例)</span></span></div>';
+        }).join('');
+      }
+      modal('为「' + esc(agentName(id)) + '」绑定窗口', tip,
+        '<div class="wlist">' + items + '</div>', '解除绑定', function () {
+          post('/api/bind', { id: id, pid: 0 }).then(function () { closeModal(); toast('已解除绑定'); load(); });
+        });
+      Array.prototype.forEach.call(document.querySelectorAll('#modalHost .witem'), function (el) {
+        el.onclick = function () {
+          post('/api/bind', { id: id, pid: Number(el.getAttribute('data-pid')) })
+            .then(function () { closeModal(); toast('已绑定，点「唤起并置顶」试试'); load(); });
+        };
+      });
+    });
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; })
+        .catch(function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+  function legacyCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  /* 派发：cli 型智能体真执行；其余复制到剪贴板 + 置顶，人工 Ctrl+V 确认 */
+  function dispatchTask(t) {
+    var a = agentOf(t.agent);
+    var text = t.title + (t.note ? '\n' + t.note : '');
+    if (!a) { toast('未知智能体：' + t.agent, true); return; }
+    setTask(t.id, { status: 'doing' });
+
+    if (S.offline) {
+      copyToClipboard(text).then(function (ok) {
+        if (a.kind === 'web' && a.url) {
+          try { var w = window.open(a.url, 'ac_' + a.id); if (w) w.focus(); } catch (e) { }
+          toast(ok ? '任务已复制，dsh 页面已打开，Ctrl+V 回车即可派发' : '复制失败，请手动输入任务', ok);
+        } else {
+          toast(ok ? '本地模式：任务已复制，切到 ' + a.name + ' 窗口 Ctrl+V 回车即可' : '复制失败，请手动输入任务', ok);
+        }
+      });
+      return;
+    }
+    if (a.dispatch === 'cli') {
+      post('/api/run', { id: a.id, text: text }).then(function (r) {
+        if (r && r.ok) toast('已开启 ' + a.name + ' 执行窗口，任务真正运行中');
+        else {
+          doFocus(a.id, text);
+          toast('真派发失败（' + ((r && r.reason) || '未知') + '），已降级为剪贴板派发', true);
+        }
+      });
+      return;
+    }
+    doFocus(a.id, text);
+  }
+
+  function setTask(id, patch) {
+    var body = { action: 'update', id: id };
+    Object.keys(patch).forEach(function (k) { body[k] = patch[k]; });
+    return taskAction(body);
+  }
+
+  function confirmClear() {
+    modal('确认清空？', '将删除全部 ' + S.tasks.length + ' 条任务。建议先「导出 JSON」做备份。',
+      '', '确认清空', function () {
+        taskAction({ action: 'clearSample' })
+          .then(function () { closeModal(); load(); toast('已清空'); });
+      });
+  }
+
+  /* ---------------- 事件 ---------------- */
+  document.addEventListener('click', function (ev) {
+    var nav = ev.target.closest ? ev.target.closest('[data-target]') : null;
+    if (nav) { setSection(nav.getAttribute('data-target')); setNav(false); return; }
+    var el = ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!el) return;
+    var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
+
+    if (act === 'focus') doFocus(id);
+    else if (act === 'launch') doLaunch(id);
+    else if (act === 'bind') doBind(id);
+    else if (act === 'refresh') { load(); toast('已刷新'); }
+    else if (act === 'export') { doExport(); }
+    else if (act === 'import') { ensure('fileImport').click(); }
+    else if (act === 'clear') { confirmClear(); }
+    else if (act === 'done') {
+      var t = S.tasks.filter(function (x) { return x.id === id; })[0];
+      if (t) setTask(id, { status: t.status === 'done' ? 'todo' : 'done' }).then(load);
+    }
+    else if (act === 'dispatch') {
+      var t2 = S.tasks.filter(function (x) { return x.id === id; })[0];
+      if (t2) dispatchTask(t2);
+    }
+    else if (act === 'del') {
+      taskAction({ action: 'delete', id: id }).then(load);
+    }
+  });
+
+  var form = document.getElementById('dispatchForm');
+  if (form) form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var title = document.getElementById('q-title').value.trim();
+    if (!title) { toast('先填任务标题', true); return; }
+    taskAction({
+      action: 'add', title: title,
+      agent: document.getElementById('q-agent').value,
+      due: document.getElementById('q-due').value || S.today
+    }).then(function (added) {
+      document.getElementById('q-title').value = '';
+      var nt = added && added.tasks ? added.tasks[added.tasks.length - 1] : null;
+      load();
+      if (nt) dispatchTask(nt); else toast('已派发');
+    });
+  });
+
+  var themeBtn = document.getElementById('theme-button');
+  if (themeBtn) themeBtn.addEventListener('click', function () {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  var menuBtn = document.getElementById('menu-button');
+  if (menuBtn) menuBtn.addEventListener('click', function () {
+    setNav(!document.querySelector('.sidebar').classList.contains('open'));
+  });
+  var backdrop = document.getElementById('nav-backdrop');
+  if (backdrop) backdrop.addEventListener('click', function () { setNav(false); });
+
+  var petBtn = document.getElementById('pet-button');
+  if (petBtn) petBtn.addEventListener('click', function () {
+    function tauriToggle() {
+      var T = window.__TAURI__;
+      var ns = T && (T.webviewWindow || T.window);
+      if (!ns || !ns.WebviewWindow) return false;
+      try {
+        var w = ns.WebviewWindow.getByLabel('pet');
+        if (!w) return false;
+        w.isVisible().then(function (v) { if (v) { w.hide(); } else { w.show(); } });
+        return true;
+      } catch (e) { return false; }
+    }
+    function httpToggle() {
+      return fetch('/api/pet/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { toast(r && r.visible === false ? '鲸鱼娘已收起' : '鲸鱼娘已唤出'); })
+        .catch(function () { toast('宠物切换失败', true); });
+    }
+    if (!tauriToggle()) httpToggle();
+  });
+
+  var copyBtn = document.getElementById('btnCopy');
+  if (copyBtn) copyBtn.addEventListener('click', function () {
+    var txt = document.getElementById('dshCmd').textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { toast('已复制'); });
+    else toast(txt);
+  });
+
+  var fi = ensure('fileImport');
+  fi.type = 'file'; fi.accept = '.json,application/json'; fi.className = 'hidden';
+  fi.addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var data;
+      try { data = JSON.parse(fr.result); } catch (err) { toast('不是合法的 JSON', true); return; }
+      restoreData(data).then(function (r) {
+        if (r && r.ok) { toast('已恢复 ' + r.count + ' 条任务'); load(); }
+        else toast('恢复失败', true);
+      });
+    };
+    fr.readAsText(f);
+    e.target.value = '';
+  });
+
+  /* ---------------- 启动 ---------------- */
+  var saved = null;
+  try { saved = localStorage.getItem('wb_agent_console_theme'); } catch (e) { }
+  setTheme(saved === 'dark' ? 'dark' : 'light');
+
+  var d = new Date();
+  var qd = document.getElementById('q-due');
+  if (qd) qd.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  var tl = document.getElementById('today-label');
+  if (tl) tl.textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 '
+    + ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][d.getDay()];
+
+  setSection('console');
+  load();
+  setInterval(load, 6000);
+  setInterval(function () { loadUsage(true); }, 60000);
+})();
+
+</script>
+</body>
+</html>
