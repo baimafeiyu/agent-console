@@ -452,21 +452,28 @@
   });
 
   /* ============ 页面自热重载 ============
-     页面是运行时从磁盘读的（no-store），所以改完 public/pet.html 不必重启应用。
-     做法：启动时抓一份本文内容作基线，之后每 30s 比一次；内容变了就自己刷新。
-     首轮只记基线、不比较（避免刚加载就误判成刷新）。 */
+     页面/配置都是运行时从磁盘读的（no-store），所以改完 public/ 下这三个文件
+     不必重启应用。做法：启动时抓一份内容作基线，之后每 30s 比一次，
+     任一文件变了就自己刷新。首轮只记基线、不比较（避免刚加载就误判成刷新）。 */
+  var WATCH_FILES = ['/pet.html', '/pet.json', '/pet-behavior.json'];
   var liveSig = null, reloading = false;
+  function sigOf(list) {
+    return list.map(function (s) {
+      return (typeof s === 'string') ? (s.length + '|' + s.slice(0, 120) + '|' + s.slice(-120)) : '?';
+    }).join('');
+  }
   function checkReload(isBaseline) {
     if (reloading) return;
-    fetch('/pet.html', { cache: 'no-store' })
-      .then(function (r) { return (r && typeof r.text === 'function') ? r.text() : ''; })
-      .then(function (h) {
-        if (typeof h !== 'string' || !h) return;
-        var sig = h.length + '|' + h.slice(0, 160) + '|' + h.slice(-160);
-        if (isBaseline || liveSig === null) { liveSig = sig; return; }
-        if (sig !== liveSig) { reloading = true; location.reload(); }
-      })
-      .catch(function () { });
+    Promise.all(WATCH_FILES.map(function (u) {
+      return fetch(u, { cache: 'no-store' })
+        .then(function (r) { return (r && typeof r.text === 'function') ? r.text() : ''; })
+        .catch(function () { return ''; });
+    })).then(function (list) {
+      if (!list.some(function (s) { return typeof s === 'string' && s; })) return;
+      var sig = sigOf(list);
+      if (isBaseline || liveSig === null) { liveSig = sig; return; }
+      if (sig !== liveSig) { reloading = true; location.reload(); }
+    }).catch(function () { });
   }
   checkReload(true);
   setInterval(function () { checkReload(false); }, 30000);
