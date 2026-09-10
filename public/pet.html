@@ -4,31 +4,50 @@
 <meta charset="utf-8">
 <style>
   html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none}
-  #stage{position:relative;width:192px;height:208px}
+  /* 宠物本体锚在窗口右下角：窗口按需变大时，宠物屏幕位置纹丝不动 */
+  #anchor{position:absolute;right:0;bottom:0;width:192px;height:208px}
   #pet{display:block;width:192px;height:208px;cursor:grab}
   #pet:active{cursor:grabbing}
-  /* 气泡：对齐 dsh-pet 的 bubbleStatus 视觉（深蓝渐变 + 淡蓝描边 + 药丸形） */
-  #bubble{position:absolute;top:2px;left:50%;transform:translateX(-50%);max-width:186px;
-    color:#f4f7ff;border-radius:999px;padding:5px 12px;
-    font:12px/1.45 "Microsoft YaHei",sans-serif;letter-spacing:.02em;white-space:nowrap;
-    background:linear-gradient(160deg,rgba(19,28,54,.92),rgba(7,11,26,.96));
-    border:1px solid rgba(126,152,255,.45);box-shadow:0 4px 12px rgba(2,6,23,.35);
-    opacity:0;transition:opacity 200ms;pointer-events:none;z-index:5;
-    overflow:hidden;text-overflow:ellipsis}
-  #bubble.show{opacity:1;animation:.24s ease-out bubble-in}
-  @keyframes bubble-in{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-  /* 菜单与信息面板：同一视觉语言 */
-  #menu,#panel{position:fixed;display:none;z-index:20;
-    color:#f4f7ff;border-radius:12px;
+
+  /* ---------- 头顶常驻状态气泡 ---------- */
+  #status{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+    margin-bottom:9px;width:180px;box-sizing:border-box;padding:7px 11px 8px;
+    border-radius:12px;color:#f4f7ff;z-index:6;pointer-events:none;
+    font:11.5px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em;
+    background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
+    border:1px solid rgba(126,152,255,.42);box-shadow:0 6px 18px rgba(2,6,23,.42)}
+  /* 指向头顶的小尾巴：先描边层，再填充层 */
+  #status::before{content:'';position:absolute;left:50%;bottom:-8px;margin-left:-7px;
+    width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;
+    border-top:7px solid rgba(126,152,255,.42)}
+  #status::after{content:'';position:absolute;left:50%;bottom:-6px;margin-left:-6px;
+    width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
+    border-top:6px solid #0a0f22}
+  #status .s-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  #status .s-row + .s-row{margin-top:3px}
+  #status .s-k{color:#9fb0e8;font-size:11px;white-space:nowrap}
+  #status .s-v{color:#f4f7ff;font-weight:700;font-size:11.5px;
+    font-variant-numeric:tabular-nums;white-space:nowrap}
+  #status .s-v.warn{color:#f0c978}
+  #status .s-v.hot{color:#ff958d}
+  #status .s-v.dim{color:#6f7ead;font-weight:400}
+  /* 互动消息模式：临时顶替状态内容 */
+  #status.msg{padding:8px 12px}
+  #status.msg::before,#status.msg::after{display:none}
+  #status .s-msg{font-size:11.5px;color:#f4f7ff;text-align:center;line-height:1.45}
+
+  /* ---------- 菜单与面板（展开态显示，底对齐保证屏幕位置稳定） ---------- */
+  #menu,#panel{position:fixed;left:6px;bottom:8px;display:none;z-index:20;
+    color:#f4f7ff;border-radius:12px;box-sizing:border-box;
     background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
     border:1px solid rgba(126,152,255,.45);box-shadow:0 8px 24px rgba(2,6,23,.45)}
-  #menu{min-width:150px;padding:5px;font:12px/1.4 "Microsoft YaHei",sans-serif}
-  #menu .mi{padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  #menu{width:176px;padding:5px;font:12px/1.4 "Microsoft YaHei",sans-serif}
+  #menu .mi{padding:4px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
   #menu .mi:hover{background:rgba(126,152,255,.22);color:#dbe4ff}
   #menu .sep{height:1px;margin:3px 8px;border-top:1px solid rgba(126,152,255,.28)}
   #menu .mi.head{color:#9fb0e8;font-size:10.5px;font-weight:700;padding:3px 10px 1px;cursor:default;letter-spacing:.04em}
   #menu .mi.head:hover{background:transparent;color:#9fb0e8}
-  #panel{width:182px;padding:10px 12px;font:12px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em}
+  #panel{width:186px;padding:10px 12px;font:12px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em}
   #panel .p-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   #panel .p-title b{font-size:12.5px;color:#dbe4ff}
   #panel .p-title .p-close{cursor:pointer;color:#9fb0e8;font-size:12px;padding:0 4px;border-radius:6px}
@@ -47,11 +66,10 @@
 </style>
 </head>
 <body>
-<div id="stage">
+<div id="anchor">
   <canvas id="pet" width="192" height="208"></canvas>
-  <div id="bubble"></div>
+  <div id="status"></div>
 </div>
-<div id="panel"></div>
 <div id="menu">
   <div class="mi head">鲸鱼娘 · 桌面宠物</div>
   <div class="mi" data-act="hide">隐藏宠物</div>
@@ -67,6 +85,7 @@
   <div class="mi" data-act="agent" data-id="opencode">OpenCode</div>
   <div class="mi" data-act="agent" data-id="dsh">DeepSeek Harness</div>
 </div>
+<div id="panel"></div>
 <script>
 (function () {
   'use strict';
@@ -87,6 +106,21 @@
     '被摸头了，很开心', '再戳一下试试呀'
   ];
   var quipIdx = 0;
+
+  /* ---------- 窗口尺寸：常态 / 展开 ---------- */
+  var SIZES = { compact: [204, 280], expanded: [400, 360] };
+  var winMode = 'compact';
+  function setWinMode(m) {
+    if (m === winMode) return;
+    winMode = m;
+    var s = SIZES[m];
+    try {
+      fetch('/api/pet/size', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ w: s[0], h: s[1] })
+      }).catch(function () { });
+    } catch (e) { }
+  }
 
   var img = new Image();
   img.src = '/pet-sprite.webp';
@@ -119,7 +153,8 @@
     }
   }
 
-  function tick(now) {
+  function tick() {
+    var now = performance.now();
     var delta = now - last;
     last = now;
     elapsed += delta;
@@ -147,36 +182,91 @@
   img.onload = function () { draw(); requestAnimationFrame(tick); };
   draw();
 
-  /* ---------------- 气泡 ---------------- */
-  var bubble = document.getElementById('bubble'), bubbleT = 0;
+  /* ---------------- 头顶常驻气泡 ---------------- */
+  var statusEl = document.getElementById('status');
+  var SD = { goMonth: null, goRoll: null, goWeek: null, ds: null, dsAvail: null };
+  var msgToken = 0, msgTimer = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function pctClass(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
+  function dsClass(v) {
+    if (v === null) return ' dim';
+    return v < 5 ? ' hot' : (v < 20 ? ' warn' : '');
+  }
+
+  function applyStatus() {
+    if (statusEl.classList.contains('msg')) return;   // 消息展示中，结束后再回落
+    var goTxt, goCls;
+    if (SD.goMonth === null) { goTxt = '—'; goCls = ' dim'; }
+    else { goTxt = '余 ' + (100 - SD.goMonth) + '%'; goCls = pctClass(SD.goMonth); }
+    var dsTxt = (SD.ds === null) ? '—' : ('¥ ' + SD.ds);
+    statusEl.innerHTML =
+      '<div class="s-row"><span class="s-k">Go 本月</span><span class="s-v' + goCls + '">' + goTxt + '</span></div>'
+      + '<div class="s-row"><span class="s-k">DeepSeek</span><span class="s-v' + dsClass(SD.ds) + '">' + dsTxt + '</span></div>';
+    var tip = [];
+    if (SD.goRoll !== null) tip.push('Go 5h 已用 ' + SD.goRoll + '%');
+    if (SD.goWeek !== null) tip.push('本周 ' + SD.goWeek + '%');
+    if (SD.dsAvail !== null) tip.push(SD.dsAvail ? 'DeepSeek 账户正常' : 'DeepSeek 账户异常');
+    statusEl.title = tip.join(' · ');
+  }
+
+  /* 互动消息：临时顶替状态内容，超时自动回落到常驻状态 */
   function showBubble(txt, ms) {
-    bubble.textContent = txt;
-    bubble.classList.add('show');
-    clearTimeout(bubbleT);
-    bubbleT = setTimeout(function () { bubble.classList.remove('show'); }, ms || 4200);
+    var tok = ++msgToken;
+    statusEl.classList.add('msg');
+    statusEl.innerHTML = '<div class="s-msg">' + esc(txt) + '</div>';
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(function () {
+      if (tok === msgToken) { statusEl.classList.remove('msg'); applyStatus(); }
+    }, ms || 3800);
   }
   function quip() {
     showBubble(QUIPS[quipIdx % QUIPS.length]);
     quipIdx++;
   }
 
-  function refreshUsage() {
+  function pullStatus() {
     fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
-      if (d && d.ok && d.usage && d.usage.monthly && typeof d.usage.monthly.percent === 'number') {
-        monthlyPercent = d.usage.monthly.percent;
-        showBubble('Go 用量 5h ' + (d.usage.rolling ? d.usage.rolling.percent : '-') + '% · 月余 ' + (100 - monthlyPercent) + '%');
+      if (d && d.ok && d.usage) {
+        var u = d.usage;
+        if (u.monthly && typeof u.monthly.percent === 'number') { SD.goMonth = u.monthly.percent; monthlyPercent = SD.goMonth; }
+        if (u.rolling && typeof u.rolling.percent === 'number') SD.goRoll = u.rolling.percent;
+        if (u.weekly && typeof u.weekly.percent === 'number') SD.goWeek = u.weekly.percent;
       }
-    }).catch(function () { });
+      applyStatus();
+    }).catch(function () { applyStatus(); });
+    fetch('/api/dshbalance').then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok && Array.isArray(d.balances) && d.balances.length) {
+        var v = parseFloat(d.balances[0].total_balance);
+        SD.ds = isNaN(v) ? null : v.toFixed(2);
+        SD.dsAvail = !!d.isAvailable;
+      }
+      applyStatus();
+    }).catch(function () { applyStatus(); });
   }
-  setInterval(refreshUsage, 60000);
-  setTimeout(refreshUsage, 1500);
+  applyStatus();
+  setTimeout(pullStatus, 400);
+  setInterval(pullStatus, 60000);
 
-  /* ---------------- 弹出信息面板 ---------------- */
+  /* ---------------- 信息面板 ---------------- */
   var panel = document.getElementById('panel');
   var menu = document.getElementById('menu');
+
   function hideMenu() { menu.style.display = 'none'; }
   function hidePanel() { panel.style.display = 'none'; }
-  function hidePopups() { hideMenu(); hidePanel(); }
+  function hidePopups() { hideMenu(); hidePanel(); setWinMode('compact'); }
+  function popupOpen() { return menu.style.display === 'block' || panel.style.display === 'block'; }
+
+  /* 先请求放大窗口、再显示，避免菜单在窄窗口里闪现后跳位 */
+  function revealAfterResize(el) {
+    if (winMode === 'expanded') { el.style.display = 'block'; return; }
+    setWinMode('expanded');
+    setTimeout(function () { if (winMode === 'expanded') el.style.display = 'block'; }, 90);
+  }
 
   function cls(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
   function barRow(label, u) {
@@ -190,9 +280,10 @@
     return m ? m[2] + '-' + m[3] : '';
   }
   function showPanelGo() {
+    hideMenu();
     panel.innerHTML = '<div class="p-title"><b>OpenCode Go 用量</b><span class="p-close">✕</span></div>'
       + '<div class="p-body">读取中…</div>';
-    panel.style.display = 'block';
+    revealAfterResize(panel);
     fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
       var body = panel.querySelector('.p-body');
       if (!body) return;
@@ -213,9 +304,10 @@
     });
   }
   function showPanelDs() {
+    hideMenu();
     panel.innerHTML = '<div class="p-title"><b>DeepSeek 余额</b><span class="p-close">✕</span></div>'
       + '<div class="p-body">读取中…</div>';
-    panel.style.display = 'block';
+    revealAfterResize(panel);
     fetch('/api/dshbalance').then(function (r) { return r.json(); }).then(function (d) {
       var body = panel.querySelector('.p-body');
       if (!body) return;
@@ -237,14 +329,13 @@
     });
   }
   panel.addEventListener('click', function (e) {
-    if (e.target.classList && e.target.classList.contains('p-close')) hidePanel();
+    if (e.target.classList && e.target.classList.contains('p-close')) hidePopups();
   });
 
   /* ---------------- 互动：hover / 点击 / 拖拽 ---------------- */
   cv.addEventListener('mouseenter', function () { hover = true; if (track === 'idle') setTrack('waiting', true); });
   cv.addEventListener('mouseleave', function () { hover = false; if (track === 'waiting') setTrack('idle', true); });
 
-  /* 全区域拖拽（Rust 自研跟手）+ 脸部单击/双击互动 */
   var dragging = null;
   cv.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return;
@@ -275,19 +366,18 @@
   });
 
   /* ---------------- 右键菜单 ---------------- */
-  function closeAll() { hidePopups(); }
   cv.addEventListener('contextmenu', function (e) {
     e.preventDefault();
     hidePanel();
-    menu.style.left = '6px';
-    menu.style.top = '4px';
-    menu.style.display = 'block';
+    revealAfterResize(menu);
   });
-  document.documentElement.addEventListener('mouseleave', closeAll);
-  window.addEventListener('blur', closeAll);
-  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+  document.documentElement.addEventListener('mouseleave', function () { if (popupOpen()) hidePopups(); });
+  window.addEventListener('blur', function () { if (popupOpen()) hidePopups(); });
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') hidePopups(); });
   document.addEventListener('click', function (e) {
-    if (!menu.contains(e.target) && !panel.contains(e.target) && e.target !== cv) closeAll();
+    if (!menu.contains(e.target) && !panel.contains(e.target) && e.target !== cv) {
+      if (popupOpen()) hidePopups();
+    }
   });
 
   menu.addEventListener('click', function (e) {
@@ -295,6 +385,8 @@
     if (!mi) return;
     hideMenu();
     var act = mi.getAttribute('data-act');
+    /* 只有不弹面板的动作才收起窗口；查余额类交给 showPanel* 维持展开态，避免收缩又展开的闪烁 */
+    if (act !== 'usage' && act !== 'dsbal') setWinMode('compact');
     if (act === 'hide') {
       showBubble('下次见～');
       var hidden = (function () {

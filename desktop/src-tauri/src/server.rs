@@ -591,6 +591,13 @@ fn handle_api(shared: &Arc<Mutex<Value>>, path: &str, body: &Value) -> (u32, Val
         "/api/usage" => (200, fetch_usage()),
         "/api/dshbalance" => (200, fetch_dshbalance()),
         "/api/pet/toggle" => (200, pet_toggle()),
+        "/api/pet/size" => {
+            // 宠物窗按需伸缩：常态(CSS 里 204x280，含头顶常驻气泡) / 展开(菜单·面板用，372x360)。
+            // 缩放后重新贴屏幕右下角(右22 底120)，保证宠物本体屏幕位置不变。
+            let w = body.get("w").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let h = body.get("h").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            (200, pet_set_size(w, h))
+        }
         "/api/pet/drag" => (200, pet_start_drag()),
         "/api/main/show" => (200, main_show()),
         "/api/openurl" => {
@@ -751,6 +758,37 @@ fn pet_toggle() -> Value {
         }
     }
     json!({ "ok": false, "reason": "no_window" })
+}
+
+// 调整宠物窗尺寸并保持「贴屏幕右下角」锚点。
+// 尺寸用逻辑像素下发（与 CSS 一致），但定位必须用缩放后的物理尺寸，否则高 DPI 下会偏。
+fn pet_set_size(w: u32, h: u32) -> Value {
+    if !(120..=1200).contains(&w) || !(120..=1200).contains(&h) {
+        return json!({ "ok": false, "reason": "bad_size", "w": w, "h": h });
+    }
+    let app = match APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone()) {
+        Some(a) => a,
+        None => return json!({ "ok": false, "reason": "no_app" }),
+    };
+    let pet = match app.get_webview_window("pet") {
+        Some(p) => p,
+        None => return json!({ "ok": false, "reason": "no_window" }),
+    };
+    let _ = pet.set_size(tauri::LogicalSize::new(w as f64, h as f64));
+    // 给窗口一点时间让尺寸生效，再按物理尺寸重新贴角
+    std::thread::sleep(std::time::Duration::from_millis(40));
+    let (pw, ph) = match pet.outer_size() {
+        Ok(s) => (s.width, s.height),
+        Err(_) => return json!({ "ok": false, "reason": "no_size" }),
+    };
+    let mut placed = false;
+    if let Ok(Some(mon)) = pet.current_monitor() {
+        let x = mon.size().width as i32 - pw as i32 - 22;
+        let y = mon.size().height as i32 - ph as i32 - 120;
+        let _ = pet.set_position(tauri::PhysicalPosition::new(x, y));
+        placed = true;
+    }
+    json!({ "ok": true, "logical": { "w": w, "h": h }, "physical": { "w": pw, "h": ph }, "repositioned": placed })
 }
 
 fn pet_start_drag() -> Value {

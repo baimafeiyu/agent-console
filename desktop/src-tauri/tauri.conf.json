@@ -22,14 +22,14 @@
         "label": "pet",
         "title": "鲸鱼娘",
         "url": "http://127.0.0.1:8766/pet.html",
-        "width": 192,
-        "height": 208,
+        "width": 204,
+        "height": 280,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": false,
-        "resizable": false,
+        "resizable": true,
         "focus": false
       }
     ],
