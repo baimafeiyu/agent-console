@@ -1,0 +1,192 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none;
+    font-family:"Microsoft YaHei",sans-serif;color:#f4f7ff}
+  /* 这个窗口本身就是"菜单"，由主程序 /api/menu/open 摆放并显示 */
+  #menu,#panel{position:absolute;left:6px;top:8px;box-sizing:border-box;border-radius:12px;
+    background:linear-gradient(160deg,rgba(19,28,54,.95),rgba(7,11,26,.98));
+    border:1px solid rgba(126,152,255,.45);box-shadow:0 8px 24px rgba(2,6,23,.5)}
+  #menu{width:176px;padding:5px;font-size:12px;line-height:1.4}
+  #menu .mi{padding:4px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  #menu .mi:hover{background:rgba(126,152,255,.22);color:#dbe4ff}
+  #menu .sep{height:1px;margin:3px 8px;border-top:1px solid rgba(126,152,255,.28)}
+  #menu .mi.head{color:#9fb0e8;font-size:10.5px;font-weight:700;padding:3px 10px 1px;cursor:default;letter-spacing:.04em}
+  #menu .mi.head:hover{background:transparent;color:#9fb0e8}
+  #panel{display:none;width:186px;padding:10px 12px;font-size:12px;line-height:1.5;letter-spacing:.02em}
+  #panel .p-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  #panel .p-title b{font-size:12.5px;color:#dbe4ff}
+  #panel .p-title .p-close{cursor:pointer;color:#9fb0e8;font-size:12px;padding:0 4px;border-radius:6px}
+  #panel .p-title .p-close:hover{color:#fff}
+  #panel .row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;margin:7px 0}
+  #panel .u-label{color:#9fb0e8;font-size:11.5px;font-weight:700;white-space:nowrap}
+  #panel .bar{height:8px;border-radius:999px;background:rgba(126,152,255,.18);overflow:hidden}
+  #panel .bar i{display:block;height:100%;border-radius:999px;background:#7e98ff}
+  #panel .bar i.warn{background:#f0c978}
+  #panel .bar i.hot{background:#ff958d}
+  #panel .u-pct{color:#f4f7ff;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums}
+  #panel .kv{display:flex;justify-content:space-between;margin:6px 0;color:#c8d4f5}
+  #panel .kv b{color:#f4f7ff;font-variant-numeric:tabular-nums}
+  #panel .p-note{margin-top:8px;color:#8fa0d6;font-size:11px}
+  #panel .p-foot{margin-top:8px;color:#9fb0e8;font-size:10.5px;border-top:1px solid rgba(126,152,255,.28);padding-top:6px}
+  #back{display:none;font-size:11px;color:#9fb0e8;cursor:pointer;padding:0 4px;border-radius:6px}
+  #back:hover{color:#fff}
+</style>
+</head>
+<body>
+<div id="menu">
+  <div class="mi head">鲸鱼娘 · 桌面宠物</div>
+  <div class="mi" data-act="hide">隐藏宠物</div>
+  <div class="sep"></div>
+  <div class="mi head">查余额</div>
+  <div class="mi" data-act="usage">OpenCode Go 用量</div>
+  <div class="mi" data-act="dsbal">DeepSeek 余额</div>
+  <div class="sep"></div>
+  <div class="mi" data-act="workbench">打开工作台</div>
+  <div class="sep"></div>
+  <div class="mi head">唤起智能体</div>
+  <div class="mi" data-act="agent" data-id="workbuddy">WorkBuddy</div>
+  <div class="mi" data-act="agent" data-id="opencode">OpenCode</div>
+  <div class="mi" data-act="agent" data-id="dsh">DeepSeek Harness</div>
+</div>
+<div id="panel"></div>
+<script>
+(function () {
+  'use strict';
+  var T = window.__TAURI__ || null;
+  var menu = document.getElementById('menu');
+  var panel = document.getElementById('panel');
+
+  function post(path, body) {
+    return fetch(path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); }).catch(function () { return null; });
+  }
+  function closeMenu() { post('/api/menu/close'); }
+  function win(label) {
+    try {
+      var ns = T && (T.webviewWindow || T.window);
+      if (ns && ns.WebviewWindow) return ns.WebviewWindow.getByLabel(label);
+    } catch (e) { }
+    return null;
+  }
+  function reset() { menu.style.display = 'block'; panel.style.display = 'none'; }
+
+  /* 窗口由主程序 show() 出来，每次重新出现都回到菜单首页 */
+  window.addEventListener('focus', reset);
+  reset();
+
+  /* 失焦 / Esc / 点到窗口空白处 → 关菜单（隐藏窗口） */
+  window.addEventListener('blur', closeMenu);
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+  document.addEventListener('mousedown', function (e) {
+    if (e.target === document.body || e.target === document.documentElement) closeMenu();
+  });
+
+  function cls(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
+  function barRow(label, u) {
+    var p = u && typeof u.percent === 'number' ? u.percent : 0;
+    return '<div class="row"><span class="u-label">' + label + '</span>'
+      + '<span class="bar"><i class="' + cls(p) + '" style="width:' + p + '%"></i></span>'
+      + '<span class="u-pct">' + p + '%</span></div>';
+  }
+  function fmtDate(iso) {
+    var m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[2] + '-' + m[3] : '';
+  }
+
+  function showGo() {
+    menu.style.display = 'none';
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="p-title"><b>OpenCode Go 用量</b><span class="p-close">✕</span></div>'
+      + '<div class="p-body">读取中…</div>';
+    fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
+      var body = panel.querySelector('.p-body');
+      if (!body) return;
+      if (d && d.ok && d.usage) {
+        var u = d.usage, foot = [];
+        if (u.rolling && u.rolling.resetsAt) foot.push('5h 重置 ' + fmtDate(u.rolling.resetsAt));
+        if (u.weekly && u.weekly.resetsAt) foot.push('周重置 ' + fmtDate(u.weekly.resetsAt));
+        if (u.monthly && u.monthly.resetsAt) foot.push('月重置 ' + fmtDate(u.monthly.resetsAt));
+        body.innerHTML = barRow('5 小时', u.rolling) + barRow('本周', u.weekly) + barRow('本月', u.monthly)
+          + (foot.length ? '<div class="p-foot">' + foot.join(' · ') + '</div>' : '');
+      } else {
+        body.innerHTML = '<div class="p-note">读取失败：' + ((d && (d.reason || d.detail)) || '未知') + '</div>';
+      }
+    }).catch(function () {
+      var b = panel.querySelector('.p-body');
+      if (b) b.innerHTML = '<div class="p-note">网络错误</div>';
+    });
+  }
+
+  function showDs() {
+    menu.style.display = 'none';
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="p-title"><b>DeepSeek 余额</b><span class="p-close">✕</span></div>'
+      + '<div class="p-body">读取中…</div>';
+    fetch('/api/dshbalance').then(function (r) { return r.json(); }).then(function (d) {
+      var body = panel.querySelector('.p-body');
+      if (!body) return;
+      if (d && d.ok && Array.isArray(d.balances) && d.balances.length) {
+        var rows = '';
+        d.balances.forEach(function (b) {
+          rows += '<div class="kv"><span>总余额（' + (b.currency || 'CNY') + '）</span><b>¥ ' + b.total_balance + '</b></div>'
+            + '<div class="kv"><span>赠送余额</span><b>¥ ' + b.granted_balance + '</b></div>'
+            + '<div class="kv"><span>充值余额</span><b>¥ ' + b.topped_up_balance + '</b></div>';
+        });
+        body.innerHTML = rows + '<div class="p-foot">' + (d.isAvailable ? '账户状态正常' : '账户状态异常') + '</div>';
+      } else {
+        body.innerHTML = '<div class="p-note">读取失败：' + ((d && (d.reason || d.detail)) || '未知') + '</div>';
+      }
+    }).catch(function () {
+      var b = panel.querySelector('.p-body');
+      if (b) b.innerHTML = '<div class="p-note">网络错误</div>';
+    });
+  }
+
+  panel.addEventListener('click', function (e) {
+    if (e.target.classList && e.target.classList.contains('p-close')) reset();
+  });
+
+  menu.addEventListener('click', function (e) {
+    var mi = e.target.closest ? e.target.closest('.mi[data-act]') : null;
+    if (!mi) return;
+    var act = mi.getAttribute('data-act');
+
+    if (act === 'usage') { showGo(); return; }
+    if (act === 'dsbal') { showDs(); return; }
+
+    if (act === 'hide') {
+      post('/api/pet/toggle').then(closeMenu);
+      return;
+    }
+    if (act === 'workbench') {
+      var opened = false;
+      try {
+        var w = win('main');
+        if (w) { w.show(); w.setFocus(); opened = true; }
+      } catch (err) { }
+      if (opened) { closeMenu(); }
+      else { post('/api/main/show').then(closeMenu); }
+      return;
+    }
+    if (act === 'agent') {
+      var id = mi.getAttribute('data-id');
+      if (id === 'dsh') {
+        post('/api/openurl', { url: 'http://127.0.0.1:3080' }).then(closeMenu);
+      } else {
+        post('/api/focus', { id: id }).then(function (r) {
+          if (r && r.ok) { closeMenu(); }
+          else { post('/api/launch', { id: id }).then(closeMenu); }
+        });
+      }
+      return;
+    }
+  });
+})();
+</script>
+</body>
+</html>

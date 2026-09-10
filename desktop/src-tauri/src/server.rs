@@ -591,12 +591,16 @@ fn handle_api(shared: &Arc<Mutex<Value>>, path: &str, body: &Value) -> (u32, Val
         "/api/usage" => (200, fetch_usage()),
         "/api/dshbalance" => (200, fetch_dshbalance()),
         "/api/pet/toggle" => (200, pet_toggle()),
-        "/api/pet/size" => {
-            // 宠物窗按需伸缩：常态(CSS 里 204x280，含头顶常驻气泡) / 展开(菜单·面板用，372x360)。
-            // 缩放后重新贴屏幕右下角(右22 底120)，保证宠物本体屏幕位置不变。
-            let w = body.get("w").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            let h = body.get("h").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            (200, pet_set_size(w, h))
+        // 菜单改用「独立小窗」而不是给宠物窗改尺寸：
+        // 透明分层窗 + resizable/set_size 会让 WebView2 子进程崩溃（实测踩过，见交接文档）。
+        "/api/menu/open" => (200, menu_open()),
+        "/api/menu/close" => (200, menu_close()),
+        "/api/pet/geom" => (200, pet_geom()),
+        "/api/pet/move" => {
+            // 直接把宠物窗移到指定屏幕坐标（物理像素）。用于 JS 驱动拖拽与排障。
+            let x = body.get("x").and_then(|v| v.as_i64()).unwrap_or(i64::MIN);
+            let y = body.get("y").and_then(|v| v.as_i64()).unwrap_or(i64::MIN);
+            (200, pet_move(x, y))
         }
         "/api/pet/drag" => (200, pet_start_drag()),
         "/api/main/show" => (200, main_show()),
@@ -650,6 +654,7 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
     let body_json: Value = serde_json::from_str(&body).unwrap_or(json!({}));
 
     if method == Method::Get && (path == "/" || path == "/index.html") {
+        log_line("page fetch: /index.html");
         let html_path = project_dir().join("public").join("index.html");
         match std::fs::read_to_string(&html_path) {
             Ok(html) => {
@@ -665,15 +670,17 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
         }
     }
 
-    if method == Method::Get && path == "/pet.html" {
-        match std::fs::read_to_string(project_dir().join("public").join("pet.html")) {
+    if method == Method::Get && (path == "/pet.html" || path == "/menu.html") {
+        log_line(&format!("page fetch: {}", path));
+        let name = path.trim_start_matches('/'); // 白名单式取值，无路径穿越风险
+        match std::fs::read_to_string(project_dir().join("public").join(name)) {
             Ok(html) => {
                 let h1 = Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap();
                 let h2 = Header::from_bytes("Cache-Control", "no-store").unwrap();
                 let _ = req.respond(Response::from_string(html).with_header(h1).with_header(h2));
             }
             Err(_) => {
-                let _ = req.respond(Response::from_string("pet.html not found").with_status_code(404));
+                let _ = req.respond(Response::from_string(format!("{} not found", name)).with_status_code(404));
             }
         }
         return;
@@ -760,11 +767,73 @@ fn pet_toggle() -> Value {
     json!({ "ok": false, "reason": "no_window" })
 }
 
-// 调整宠物窗尺寸并保持「贴屏幕右下角」锚点。
-// 尺寸用逻辑像素下发（与 CSS 一致），但定位必须用缩放后的物理尺寸，否则高 DPI 下会偏。
-fn pet_set_size(w: u32, h: u32) -> Value {
-    if !(120..=1200).contains(&w) || !(120..=1200).contains(&h) {
-        return json!({ "ok": false, "reason": "bad_size", "w": w, "h": h });
+// 打开鲸鱼娘菜单窗（独立小窗，不改宠物窗尺寸）。
+// 位置：贴着宠物窗的左侧、与宠物底边对齐，视觉上像从宠物身上弹出来的。
+fn menu_open() -> Value {
+    let app = match APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone()) {
+        Some(a) => a,
+        None => return json!({ "ok": false, "reason": "no_app" }),
+    };
+    let pet = match app.get_webview_window("pet") {
+        Some(p) => p,
+        None => return json!({ "ok": false, "reason": "no_pet" }),
+    };
+    let menu = match app.get_webview_window("petmenu") {
+        Some(m) => m,
+        None => return json!({ "ok": false, "reason": "no_menu_window" }),
+    };
+    let mut at = None;
+    if let (Ok(p), Ok(s), Ok(ms)) = (pet.outer_position(), pet.outer_size(), menu.outer_size()) {
+        // 左移一个菜单窗宽，再回退 12px 贴住宠物窗（那 12px 是宠物窗左侧的透明留白）
+        let x = p.x - ms.width as i32 + 12;
+        // 底边与宠物窗对齐
+        let y = p.y + s.height as i32 - ms.height as i32;
+        let _ = menu.set_position(tauri::PhysicalPosition::new(x, y));
+        at = Some(json!({ "x": x, "y": y }));
+    }
+    let _ = menu.show();
+    let _ = menu.set_focus();
+    json!({ "ok": true, "at": at })
+}
+
+fn menu_close() -> Value {
+    if let Some(guard) = APP.get().and_then(|m| m.lock().ok()) {
+        if let Some(app) = guard.as_ref() {
+            if let Some(menu) = app.get_webview_window("petmenu") {
+                let _ = menu.hide();
+                return json!({ "ok": true });
+            }
+        }
+    }
+    json!({ "ok": false, "reason": "no_window" })
+}
+
+// 宠物窗几何诊断：位置 / 尺寸 / 可见性
+fn pet_geom() -> Value {    let app = match APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone()) {
+        Some(a) => a,
+        None => return json!({ "ok": false, "reason": "no_app" }),
+    };
+    let pet = match app.get_webview_window("pet") {
+        Some(p) => p,
+        None => return json!({ "ok": false, "reason": "no_window" }),
+    };
+    let pos = pet.outer_position().ok();
+    let size = pet.outer_size().ok();
+    json!({
+        "ok": true,
+        "position": pos.map(|p| json!({ "x": p.x, "y": p.y })),
+        "size": size.map(|s| json!({ "w": s.width, "h": s.height })),
+        "visible": pet.is_visible().unwrap_or(false),
+        "monitor": pet.current_monitor().ok().flatten().map(|m| json!({
+            "w": m.size().width, "h": m.size().height, "scale": m.scale_factor()
+        }))
+    })
+}
+
+// 把宠物窗移到指定物理坐标
+fn pet_move(x: i64, y: i64) -> Value {
+    if x == i64::MIN || y == i64::MIN {
+        return json!({ "ok": false, "reason": "bad_pos" });
     }
     let app = match APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone()) {
         Some(a) => a,
@@ -774,21 +843,8 @@ fn pet_set_size(w: u32, h: u32) -> Value {
         Some(p) => p,
         None => return json!({ "ok": false, "reason": "no_window" }),
     };
-    let _ = pet.set_size(tauri::LogicalSize::new(w as f64, h as f64));
-    // 给窗口一点时间让尺寸生效，再按物理尺寸重新贴角
-    std::thread::sleep(std::time::Duration::from_millis(40));
-    let (pw, ph) = match pet.outer_size() {
-        Ok(s) => (s.width, s.height),
-        Err(_) => return json!({ "ok": false, "reason": "no_size" }),
-    };
-    let mut placed = false;
-    if let Ok(Some(mon)) = pet.current_monitor() {
-        let x = mon.size().width as i32 - pw as i32 - 22;
-        let y = mon.size().height as i32 - ph as i32 - 120;
-        let _ = pet.set_position(tauri::PhysicalPosition::new(x, y));
-        placed = true;
-    }
-    json!({ "ok": true, "logical": { "w": w, "h": h }, "physical": { "w": pw, "h": ph }, "repositioned": placed })
+    let _ = pet.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+    json!({ "ok": true, "at": { "x": x, "y": y } })
 }
 
 fn pet_start_drag() -> Value {

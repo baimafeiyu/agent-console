@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <style>
   html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none}
-  /* 宠物本体锚在窗口右下角：窗口按需变大时，宠物屏幕位置纹丝不动 */
+  /* 宠物本体锚在窗口右下角 */
   #anchor{position:absolute;right:0;bottom:0;width:192px;height:208px}
   #pet{display:block;width:192px;height:208px;cursor:grab}
   #pet:active{cursor:grabbing}
@@ -16,7 +16,7 @@
     font:11.5px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em;
     background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
     border:1px solid rgba(126,152,255,.42);box-shadow:0 6px 18px rgba(2,6,23,.42)}
-  /* 指向头顶的小尾巴：先描边层，再填充层 */
+  /* 指向头顶的小尾巴：描边层 + 填充层两个三角叠出来 */
   #status::before{content:'';position:absolute;left:50%;bottom:-8px;margin-left:-7px;
     width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;
     border-top:7px solid rgba(126,152,255,.42)}
@@ -35,34 +35,6 @@
   #status.msg{padding:8px 12px}
   #status.msg::before,#status.msg::after{display:none}
   #status .s-msg{font-size:11.5px;color:#f4f7ff;text-align:center;line-height:1.45}
-
-  /* ---------- 菜单与面板（展开态显示，底对齐保证屏幕位置稳定） ---------- */
-  #menu,#panel{position:fixed;left:6px;bottom:8px;display:none;z-index:20;
-    color:#f4f7ff;border-radius:12px;box-sizing:border-box;
-    background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
-    border:1px solid rgba(126,152,255,.45);box-shadow:0 8px 24px rgba(2,6,23,.45)}
-  #menu{width:176px;padding:5px;font:12px/1.4 "Microsoft YaHei",sans-serif}
-  #menu .mi{padding:4px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
-  #menu .mi:hover{background:rgba(126,152,255,.22);color:#dbe4ff}
-  #menu .sep{height:1px;margin:3px 8px;border-top:1px solid rgba(126,152,255,.28)}
-  #menu .mi.head{color:#9fb0e8;font-size:10.5px;font-weight:700;padding:3px 10px 1px;cursor:default;letter-spacing:.04em}
-  #menu .mi.head:hover{background:transparent;color:#9fb0e8}
-  #panel{width:186px;padding:10px 12px;font:12px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em}
-  #panel .p-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  #panel .p-title b{font-size:12.5px;color:#dbe4ff}
-  #panel .p-title .p-close{cursor:pointer;color:#9fb0e8;font-size:12px;padding:0 4px;border-radius:6px}
-  #panel .p-title .p-close:hover{color:#fff}
-  #panel .row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;margin:7px 0}
-  #panel .u-label{color:#9fb0e8;font-size:11.5px;font-weight:700;white-space:nowrap}
-  #panel .bar{height:8px;border-radius:999px;background:rgba(126,152,255,.18);overflow:hidden}
-  #panel .bar i{display:block;height:100%;border-radius:999px;background:#7e98ff;transition:width 300ms ease}
-  #panel .bar i.warn{background:#f0c978}
-  #panel .bar i.hot{background:#ff958d}
-  #panel .u-pct{color:#f4f7ff;font-size:11.5px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
-  #panel .kv{display:flex;justify-content:space-between;margin:6px 0;color:#c8d4f5}
-  #panel .kv b{color:#f4f7ff;font-variant-numeric:tabular-nums}
-  #panel .p-note{margin-top:8px;color:#8fa0d6;font-size:11px}
-  #panel .p-foot{margin-top:8px;color:#9fb0e8;font-size:10.5px;border-top:1px solid rgba(126,152,255,.28);padding-top:6px}
 </style>
 </head>
 <body>
@@ -70,22 +42,6 @@
   <canvas id="pet" width="192" height="208"></canvas>
   <div id="status"></div>
 </div>
-<div id="menu">
-  <div class="mi head">鲸鱼娘 · 桌面宠物</div>
-  <div class="mi" data-act="hide">隐藏宠物</div>
-  <div class="sep"></div>
-  <div class="mi head">查余额</div>
-  <div class="mi" data-act="usage">OpenCode Go 用量</div>
-  <div class="mi" data-act="dsbal">DeepSeek 余额</div>
-  <div class="sep"></div>
-  <div class="mi" data-act="workbench">打开工作台</div>
-  <div class="sep"></div>
-  <div class="mi head">唤起智能体</div>
-  <div class="mi" data-act="agent" data-id="workbuddy">WorkBuddy</div>
-  <div class="mi" data-act="agent" data-id="opencode">OpenCode</div>
-  <div class="mi" data-act="agent" data-id="dsh">DeepSeek Harness</div>
-</div>
-<div id="panel"></div>
 <script>
 (function () {
   'use strict';
@@ -107,28 +63,12 @@
   ];
   var quipIdx = 0;
 
-  /* ---------- 窗口尺寸：常态 / 展开 ---------- */
-  var SIZES = { compact: [204, 280], expanded: [400, 360] };
-  var winMode = 'compact';
-  function setWinMode(m) {
-    if (m === winMode) return;
-    winMode = m;
-    var s = SIZES[m];
-    try {
-      fetch('/api/pet/size', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ w: s[0], h: s[1] })
-      }).catch(function () { });
-    } catch (e) { }
-  }
-
   var img = new Image();
   img.src = '/pet-sprite.webp';
   var cv = document.getElementById('pet');
   var ctx = cv.getContext('2d');
   var track = 'idle', idx = 0, elapsed = 0, last = performance.now();
-  var idleCycles = 0, hover = false;
-  var monthlyPercent = 0;
+  var idleCycles = 0, hover = false, monthlyPercent = 0;
 
   var T = window.__TAURI__ || null;
   function win(label) {
@@ -193,10 +133,7 @@
     });
   }
   function pctClass(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
-  function dsClass(v) {
-    if (v === null) return ' dim';
-    return v < 5 ? ' hot' : (v < 20 ? ' warn' : '');
-  }
+  function dsClass(v) { return v === null ? ' dim' : (v < 5 ? ' hot' : (v < 20 ? ' warn' : '')); }
 
   function applyStatus() {
     if (statusEl.classList.contains('msg')) return;   // 消息展示中，结束后再回落
@@ -214,7 +151,7 @@
     statusEl.title = tip.join(' · ');
   }
 
-  /* 互动消息：临时顶替状态内容，超时自动回落到常驻状态 */
+  /* 互动消息：临时顶替状态内容，超时自动回落 */
   function showBubble(txt, ms) {
     var tok = ++msgToken;
     statusEl.classList.add('msg');
@@ -252,86 +189,6 @@
   setTimeout(pullStatus, 400);
   setInterval(pullStatus, 60000);
 
-  /* ---------------- 信息面板 ---------------- */
-  var panel = document.getElementById('panel');
-  var menu = document.getElementById('menu');
-
-  function hideMenu() { menu.style.display = 'none'; }
-  function hidePanel() { panel.style.display = 'none'; }
-  function hidePopups() { hideMenu(); hidePanel(); setWinMode('compact'); }
-  function popupOpen() { return menu.style.display === 'block' || panel.style.display === 'block'; }
-
-  /* 先请求放大窗口、再显示，避免菜单在窄窗口里闪现后跳位 */
-  function revealAfterResize(el) {
-    if (winMode === 'expanded') { el.style.display = 'block'; return; }
-    setWinMode('expanded');
-    setTimeout(function () { if (winMode === 'expanded') el.style.display = 'block'; }, 90);
-  }
-
-  function cls(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
-  function barRow(label, u) {
-    var p = u && typeof u.percent === 'number' ? u.percent : 0;
-    return '<div class="row"><span class="u-label">' + label + '</span>'
-      + '<span class="bar"><i class="' + cls(p) + '" style="width:' + p + '%"></i></span>'
-      + '<span class="u-pct">' + p + '%</span></div>';
-  }
-  function fmtDate(iso) {
-    var m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})/);
-    return m ? m[2] + '-' + m[3] : '';
-  }
-  function showPanelGo() {
-    hideMenu();
-    panel.innerHTML = '<div class="p-title"><b>OpenCode Go 用量</b><span class="p-close">✕</span></div>'
-      + '<div class="p-body">读取中…</div>';
-    revealAfterResize(panel);
-    fetch('/api/usage').then(function (r) { return r.json(); }).then(function (d) {
-      var body = panel.querySelector('.p-body');
-      if (!body) return;
-      if (d && d.ok && d.usage) {
-        var u = d.usage;
-        var foot = [];
-        if (u.rolling && u.rolling.resetsAt) foot.push('5h 重置 ' + fmtDate(u.rolling.resetsAt));
-        if (u.weekly && u.weekly.resetsAt) foot.push('周重置 ' + fmtDate(u.weekly.resetsAt));
-        if (u.monthly && u.monthly.resetsAt) foot.push('月重置 ' + fmtDate(u.monthly.resetsAt));
-        body.innerHTML = barRow('5 小时', u.rolling) + barRow('本周', u.weekly) + barRow('本月', u.monthly)
-          + (foot.length ? '<div class="p-foot">' + foot.join(' · ') + '</div>' : '');
-      } else {
-        body.innerHTML = '<div class="p-note">读取失败：' + ((d && (d.reason || d.detail)) || '未知') + '</div>';
-      }
-    }).catch(function () {
-      var body = panel.querySelector('.p-body');
-      if (body) body.innerHTML = '<div class="p-note">网络错误</div>';
-    });
-  }
-  function showPanelDs() {
-    hideMenu();
-    panel.innerHTML = '<div class="p-title"><b>DeepSeek 余额</b><span class="p-close">✕</span></div>'
-      + '<div class="p-body">读取中…</div>';
-    revealAfterResize(panel);
-    fetch('/api/dshbalance').then(function (r) { return r.json(); }).then(function (d) {
-      var body = panel.querySelector('.p-body');
-      if (!body) return;
-      if (d && d.ok && Array.isArray(d.balances) && d.balances.length) {
-        var rows = '';
-        d.balances.forEach(function (b) {
-          rows += '<div class="kv"><span>总余额（' + (b.currency || 'CNY') + '）</span><b>¥ ' + b.total_balance + '</b></div>'
-            + '<div class="kv"><span>赠送余额</span><b>¥ ' + b.granted_balance + '</b></div>'
-            + '<div class="kv"><span>充值余额</span><b>¥ ' + b.topped_up_balance + '</b></div>';
-        });
-        body.innerHTML = rows
-          + '<div class="p-foot">' + (d.isAvailable ? '账户状态正常' : '账户状态异常') + '</div>';
-      } else {
-        body.innerHTML = '<div class="p-note">读取失败：' + ((d && (d.reason || d.detail)) || '未知') + '</div>';
-      }
-    }).catch(function () {
-      var body = panel.querySelector('.p-body');
-      if (body) body.innerHTML = '<div class="p-note">网络错误</div>';
-    });
-  }
-  panel.addEventListener('click', function (e) {
-    if (e.target.classList && e.target.classList.contains('p-close')) hidePopups();
-  });
-
   /* ---------------- 互动：hover / 点击 / 拖拽 ---------------- */
   cv.addEventListener('mouseenter', function () { hover = true; if (track === 'idle') setTrack('waiting', true); });
   cv.addEventListener('mouseleave', function () { hover = false; if (track === 'waiting') setTrack('idle', true); });
@@ -346,13 +203,11 @@
     var dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
     if (Math.sqrt(dx * dx + dy * dy) > 4) {
       dragging.moved = true;
-      hidePopups();
       fetch('/api/pet/drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
     }
   });
   window.addEventListener('mouseup', function (e) {
     if (dragging && !dragging.moved && e.button === 0) {
-      hidePopups();
       setTrack('jumping', true);
       quip();
     }
@@ -365,77 +220,11 @@
     if (w) { w.show(); w.setFocus(); }
   });
 
-  /* ---------------- 右键菜单 ---------------- */
+  /* ---------------- 右键 → 打开独立菜单窗 ---------------- */
   cv.addEventListener('contextmenu', function (e) {
     e.preventDefault();
-    hidePanel();
-    revealAfterResize(menu);
-  });
-  document.documentElement.addEventListener('mouseleave', function () { if (popupOpen()) hidePopups(); });
-  window.addEventListener('blur', function () { if (popupOpen()) hidePopups(); });
-  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') hidePopups(); });
-  document.addEventListener('click', function (e) {
-    if (!menu.contains(e.target) && !panel.contains(e.target) && e.target !== cv) {
-      if (popupOpen()) hidePopups();
-    }
-  });
-
-  menu.addEventListener('click', function (e) {
-    var mi = e.target.closest ? e.target.closest('.mi[data-act]') : null;
-    if (!mi) return;
-    hideMenu();
-    var act = mi.getAttribute('data-act');
-    /* 只有不弹面板的动作才收起窗口；查余额类交给 showPanel* 维持展开态，避免收缩又展开的闪烁 */
-    if (act !== 'usage' && act !== 'dsbal') setWinMode('compact');
-    if (act === 'hide') {
-      showBubble('下次见～');
-      var hidden = (function () {
-        try {
-          if (T && T.window && T.window.getCurrentWindow) { T.window.getCurrentWindow().hide(); return true; }
-        } catch (err) { }
-        return false;
-      })();
-      if (!hidden) {
-        fetch('/api/pet/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
-      }
-    } else if (act === 'usage') {
-      showPanelGo();
-    } else if (act === 'dsbal') {
-      showPanelDs();
-    } else if (act === 'workbench') {
-      setTrack('waving', true);
-      showBubble('工作台来啦～');
-      var opened = (function () {
-        try {
-          var w = win('main');
-          if (w) { w.show(); w.setFocus(); return true; }
-        } catch (err) { }
-        return false;
-      })();
-      if (!opened) {
-        fetch('/api/main/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function () { });
-      }
-    } else if (act === 'agent') {
-      var id = mi.getAttribute('data-id');
-      var name = mi.textContent;
-      setTrack('jumping', true);
-      if (id === 'dsh') {
-        fetch('/api/openurl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'http://127.0.0.1:3080' }) })
-          .then(function () { showBubble('dsh 页面已打开～'); })
-          .catch(function () { showBubble('dsh 打不开，可能没启动', true); });
-      } else {
-        fetch('/api/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
-          .then(function (r) { return r.json(); })
-          .then(function (r) {
-            if (r && r.ok) { showBubble('已唤起 ' + name + '～'); }
-            else {
-              return fetch('/api/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
-                .then(function () { showBubble(name + ' 没在运行，已尝试启动'); });
-            }
-          })
-          .catch(function () { showBubble('唤起失败……', true); });
-      }
-    }
+    fetch('/api/menu/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .catch(function () { });
   });
 })();
 </script>

@@ -16,7 +16,8 @@
         "width": 1280,
         "height": 840,
         "minWidth": 480,
-        "minHeight": 600
+        "minHeight": 600,
+        "additionalBrowserArgs": "--disable-gpu --disable-features=RendererCodeIntegrity"
       },
       {
         "label": "pet",
@@ -29,8 +30,25 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": false,
-        "resizable": true,
-        "focus": false
+        "resizable": false,
+        "focus": false,
+        "additionalBrowserArgs": "--disable-gpu --disable-features=RendererCodeIntegrity"
+      },
+      {
+        "label": "petmenu",
+        "title": "鲸鱼娘菜单",
+        "url": "http://127.0.0.1:8766/menu.html",
+        "width": 200,
+        "height": 310,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "focus": false,
+        "additionalBrowserArgs": "--disable-gpu --disable-features=RendererCodeIntegrity"
       }
     ],
     "security": {
