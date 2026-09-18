@@ -30,16 +30,13 @@ fn main() {
             }
             tray_builder.build(app)?;
 
-            // 鲸鱼娘宠物窗：贴屏幕右下（右 22px，底 120px，与 dsh web 宠物习惯一致）
-            if let Some(pet) = app.get_webview_window("pet") {
-                if let Ok(Some(mon)) = pet.current_monitor() {
-                    if let Ok(size) = pet.outer_size() {
-                        let x = mon.size().width as i32 - size.width as i32 - 22;
-                        let y = mon.size().height as i32 - size.height as i32 - 120;
-                        let _ = pet.set_position(tauri::PhysicalPosition::new(x, y));
-                    }
-                }
-            }
+            // 鲸鱼娘宠物窗 + 右侧网速气泡：整组贴屏幕右下（右 22px，底 120px）
+            // 单独左移 166px 给气泡让位，否则气泡会被推出屏幕右侧。计算放在 server 里
+            // 以复用 NET_GAP_LP，避免两处硬编码间隙。
+            server::place_pet_home();
+
+            // 气泡跟随线程：宠物拖到哪，气泡跟到哪（越界时自动翻到左侧）
+            server::start_net_follow();
 
             Ok(())
         })

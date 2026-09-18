@@ -39,6 +39,7 @@
 <div id="menu">
   <div class="mi head">鲸鱼娘 · 桌面宠物</div>
   <div class="mi" data-act="hide">隐藏宠物</div>
+  <div class="mi" data-act="nettoggle" id="miNet">网速气泡</div>
   <div class="sep"></div>
   <div class="mi head">查余额</div>
   <div class="mi" data-act="usage">OpenCode Go 用量</div>
@@ -73,7 +74,24 @@
     } catch (e) { }
     return null;
   }
-  function reset() { menu.style.display = 'block'; panel.style.display = 'none'; }
+  function reset() {
+    menu.style.display = 'block';
+    panel.style.display = 'none';
+    refreshNetLabel();
+  }
+
+  /* 「网速气泡」这一项要显示成反动作：当前开着 → 写"隐藏网速气泡" */
+  function refreshNetLabel() {
+    var el = document.getElementById('miNet');
+    if (!el) return;
+    fetch('/api/netspeed', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var on = !!(d && d.ok && d.enabled);
+        el.textContent = on ? '隐藏网速气泡' : '显示网速气泡';
+      })
+      .catch(function () { });
+  }
 
   /* 窗口由主程序 show() 出来，每次重新出现都回到菜单首页 */
   window.addEventListener('focus', reset);
@@ -161,6 +179,14 @@
 
     if (act === 'hide') {
       post('/api/pet/toggle').then(closeMenu);
+      return;
+    }
+    if (act === 'nettoggle') {
+      // 不传 enabled → 服务端取反；状态落盘，重启后保持
+      post('/api/net/toggle').then(function (r) {
+        var el = document.getElementById('miNet');
+        if (el && r && r.ok) el.textContent = r.enabled ? '隐藏网速气泡' : '显示网速气泡';
+      });
       return;
     }
     if (act === 'workbench') {

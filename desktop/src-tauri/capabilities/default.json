@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "指挥台默认能力：主窗口与宠物窗的核心窗口操作",
-  "windows": ["main", "pet", "petmenu"],
+  "windows": ["main", "pet", "petmenu", "net"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

@@ -231,7 +231,14 @@
     var t = TRACKS[cur];
     ctx.clearRect(0, 0, CELL_W, CELL_H);
     if (t && img.complete && img.naturalWidth) {
-      ctx.drawImage(img, idx * CELL_W, t.row * CELL_H, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
+      var row = t.row, f = idx;
+      // 兜底：清单声明的行超出图集实际高度时（图集还没同步升级），回落 idle 行，
+      // 否则 drawImage 取越界 sy 什么也画不出，宠物会整只消失。
+      if ((row + 1) * CELL_H > img.naturalHeight) {
+        row = 0;
+        f = f % Math.max(1, (TRACKS.idle && TRACKS.idle.frames) || 1);
+      }
+      ctx.drawImage(img, f * CELL_W, row * CELL_H, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
     }
   }
 

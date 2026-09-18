@@ -1,0 +1,162 @@
+<!doctype html>
+<!-- net-ver: 2026-09-18-01 -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none}
+  /* 窗口 166x56：气泡卡 158x52 + 8px 给尾巴让位（尾巴朝向随停靠侧切换） */
+  #bubble{position:absolute;top:2px;left:8px;width:158px;height:52px;box-sizing:border-box;
+    padding:7px 10px 8px;border-radius:12px;color:#f4f7ff;cursor:pointer;
+    font:11px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em;
+    background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
+    border:1px solid rgba(126,152,255,.42)}
+  #bubble.left{left:0}
+  /* 指向宠物的小尾巴：描边层 + 填充层，两个三角叠出来（与头顶气泡同一套路） */
+  #bubble::before,#bubble::after{content:'';position:absolute;top:50%;width:0;height:0}
+  #bubble.right::before{left:-8px;margin-top:-7px;border-top:7px solid transparent;
+    border-bottom:7px solid transparent;border-right:7px solid rgba(126,152,255,.42)}
+  #bubble.right::after{left:-6px;margin-top:-6px;border-top:6px solid transparent;
+    border-bottom:6px solid transparent;border-right:6px solid #0a0f22}
+  #bubble.left::before{right:-8px;margin-top:-7px;border-top:7px solid transparent;
+    border-bottom:7px solid transparent;border-left:7px solid rgba(126,152,255,.42)}
+  #bubble.left::after{right:-6px;margin-top:-6px;border-top:6px solid transparent;
+    border-bottom:6px solid transparent;border-left:6px solid #0a0f22}
+
+  .row{display:flex;justify-content:space-between;align-items:center;gap:6px;height:18px}
+  .k{color:#9fb0e8;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .arrow{font-size:11px}
+  .v{color:#f4f7ff;font-weight:700;font-size:12.5px;white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .v.dim{color:#6f7ead;font-weight:400}
+  .v.fast{color:#5ee0c0}
+  .a-down{color:#5ee0c0}
+  .a-up{color:#a8b6ff}
+  #mode{position:absolute;left:0;bottom:0;font-size:9px;color:#6f7ead;opacity:0}
+</style>
+</head>
+<body>
+<div id="bubble" class="right">
+  <div class="row"><span class="k"><span class="arrow a-down">↓</span> 下行</span><span class="v" id="dn">—</span></div>
+  <div class="row"><span class="k"><span class="arrow a-up">↑</span> 上行</span><span class="v" id="up">—</span></div>
+</div>
+<span id="mode"></span>
+<script>
+(function () {
+  'use strict';
+  var K = 1024;
+  var bubble = document.getElementById('bubble');
+  var elDn = document.getElementById('dn');
+  var elUp = document.getElementById('up');
+
+  /* 值 → 文字。与 Rust 侧 fmt_speed 同口径（三位有效数字，防宽度跳动） */
+  function fmt(bps) {
+    if (!isFinite(bps) || bps < 0.5) return '0 K/s';   // 接口异常/NaN 时也不能渲染出 "NaN M/s"
+    if (bps < K) return Math.round(bps) + ' B/s';
+    var kb = bps / K;
+    if (kb < K) return Math.round(kb) + ' K/s';
+    var mb = kb / K;
+    return (mb < 100 ? mb.toFixed(2) : mb.toFixed(1)) + ' M/s';
+  }
+  function level(bps) {
+    if (!isFinite(bps)) return ' dim';
+    if (bps < 8 * K) return ' dim';
+    return bps >= 5 * K * K ? ' fast' : '';
+  }
+
+  /* 测试缝：给 devtools/net-fmt-test.cjs 用来锁定显示口径（与 Rust fmt_speed 必须一致） */
+  window.__netFmt = fmt;
+  window.__netLevel = level;
+
+  /* 非对称 EMA：升快（0.5）降更快（0.7）——
+     否则一次下载结束要好几秒数字才落到 0，看着像卡住 */
+  var emaD = null, emaU = null;
+  function smooth(prev, raw) {
+    if (prev === null) return raw;
+    var a = raw > prev ? 0.5 : 0.7;
+    return prev + a * (raw - prev);
+  }
+
+  var mode = 'total';        // total | detail
+  var lastDrawD = null, lastDrawU = null;
+
+  function render(d) {
+    bubble.className = (d.side === 'left' ? 'left' : 'right');
+    if (mode === 'detail' && Array.isArray(d.ifaces) && d.ifaces.length) {
+      var a = d.ifaces[0], b = d.ifaces[1];
+      setRow(a, '↓', b);
+      return;
+    }
+    elDn.className = 'v' + (d.stale || d.warm ? ' dim' : level(emaD === null ? 0 : emaD));
+    elUp.className = 'v' + (d.stale || d.warm ? ' dim' : level(emaU === null ? 0 : emaU));
+    elDn.textContent = (d.stale || d.warm) ? '—' : fmt(emaD === null ? d.down : emaD);
+    elUp.textContent = (d.stale || d.warm) ? '—' : fmt(emaU === null ? d.up : emaU);
+  }
+  function setRow(a, arrow, b) {
+    if (!a) { elDn.textContent = '—'; elUp.textContent = '—'; return; }
+    setOne(elDn, a.name, a.down, arrow);
+    if (b) { setOne(elUp, b.name, b.down, arrow); }
+    else { elUp.className = 'v dim'; elUp.textContent = '—'; }
+  }
+  function setOne(el, name, bps, arrow) {
+    el.className = 'v' + level(bps);
+    el.textContent = shortName(name) + ' ' + fmt(bps);
+  }
+  function shortName(n) {
+    var s = String(n || '');
+    return s.length > 6 ? s.slice(0, 6) : s;
+  }
+
+  function pull() {
+    var url = (mode === 'detail') ? '/api/netspeed/detail' : '/api/netspeed';
+    fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) return;
+      emaD = smooth(emaD, d.down);
+      emaU = smooth(emaU, d.up);
+      /* 变化 < 3% 就不重绘（防抖，避免数字每秒无意义地闪） */
+      var changed = lastDrawD === null || lastDrawU === null
+        || Math.abs(emaD - lastDrawD) > Math.max(1, lastDrawD * 0.03)
+        || Math.abs(emaU - lastDrawU) > Math.max(1, lastDrawU * 0.03)
+        || d.stale || d.warm || mode === 'detail';
+      if (changed) {
+        lastDrawD = emaD; lastDrawU = emaU;
+        render(d);
+      }
+    }).catch(function () {
+      elDn.className = 'v dim'; elUp.className = 'v dim';
+      elDn.textContent = '—'; elUp.textContent = '—';
+    });
+  }
+
+  /* 点一下：总速 ↔ 分网卡明细（排障时看一眼就知道是哪张网卡在跑，
+     VPN/TUN 双计数也能一眼看穿） */
+  bubble.addEventListener('click', function () {
+    mode = (mode === 'total') ? 'detail' : 'total';
+    document.getElementById('mode').textContent = mode;
+    emaD = null; emaU = null; lastDrawD = null; lastDrawU = null;
+    pull();
+  });
+
+  /* 自热重载：改完 public/net.html 最多 30 秒自动生效，不用重启应用 */
+  var liveSig = null, reloading = false;
+  function checkReload(isBaseline) {
+    if (reloading) return;
+    fetch('/net.html', { cache: 'no-store' })
+      .then(function (r) { return (r && typeof r.text === 'function') ? r.text() : ''; })
+      .then(function (h) {
+        if (typeof h !== 'string' || !h) return;
+        var sig = h.length + '|' + h.slice(0, 120) + '|' + h.slice(-120);
+        if (isBaseline || liveSig === null) { liveSig = sig; return; }
+        if (sig !== liveSig) { reloading = true; location.reload(); }
+      })
+      .catch(function () { });
+  }
+  checkReload(true);
+  setInterval(function () { checkReload(false); }, 30000);
+
+  pull();
+  setInterval(pull, 1000);
+})();
+</script>
+</body>
+</html>

@@ -16,10 +16,18 @@ const html = fs.readFileSync(path.join(ROOT, 'public', 'pet.html'), 'utf8');
 const js = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 const CELL_W = 192, CELL_H = 208;
-const ROW = {
-  0: 'idle', 1: 'running-right', 2: 'running-left', 3: 'waving', 4: 'jumping',
-  5: 'failed', 6: 'waiting', 7: 'running', 8: 'review'
-};
+/* 行号 → 轨道名：从 pet.json 推导（row 字段优先，缺省用键序），
+   与 pet.html 的取值规则一致。不要再手工维护这张表 —— 加行动作时
+   手工表会漏项，导致断言把新轨道误认成 "row9"。 */
+const MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'pet.json'), 'utf8'));
+const ROW = {};
+{
+  const tracks = (MANIFEST.sprite2d && MANIFEST.sprite2d.tracks) || {};
+  Object.keys(tracks).forEach((n, i) => {
+    const r = (typeof tracks[n].row === 'number') ? tracks[n].row : i;
+    ROW[r] = n;
+  });
+}
 const BEH = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'pet-behavior.json'), 'utf8'));
 
 /* ---------------- 虚拟时钟 + 定时器 ---------------- */
@@ -264,7 +272,39 @@ function frameAdvanced() {
   FAKE_USAGE = 18;
   await advance(1000);
 
-  console.log('\n== 9. 兜底：配置缺失时仍能跑 ==');
+  console.log('\n== 9. 兜底：清单行号超出图集高度时不整只消失 ==');
+  // 场景：先改 pet.json 加了新行动作，应用还没重启（图集仍是旧的 9 行）。
+  // 此时 drawImage 取 sy=1872 越界 → 浏览器什么也不画，而 clearRect 已经清了画布
+  // → 宠物整只消失。draw() 里的越界回落必须把它挡成 idle 行。
+  const clickOnce = async () => {
+    els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+    winHandlers.mouseup({ button: 0 });
+    await advance(120);
+  };
+
+  // 9a. 图集升级到 10 行 → drink(row 9) 能正常绘制
+  lastImg.naturalHeight = 2080;
+  ctxLog.length = 0;
+  let sawDrink = false;
+  for (let i = 0; i < 40 && !sawDrink; i++) {
+    await clickOnce();
+    if (currentRow() === 9) sawDrink = true;
+    await advance(4200);
+  }
+  check('图集 10 行时 drink(row 9) 正常绘制', sawDrink);
+
+  // 9b. 图集退回 9 行 → 不得出现越界行，行号必须全部落在 0..8
+  lastImg.naturalHeight = 1872;
+  ctxLog.length = 0;
+  for (let i = 0; i < 40; i++) { await clickOnce(); await advance(4200); }
+  const overs = ctxLog.filter(c => c.sy + CELL_H > 1872);
+  check('图集 9 行时无越界绘制（不会整只消失）', overs.length === 0,
+        '越界 ' + overs.length + ' 次，如 sy=' + (overs[0] && overs[0].sy));
+  check('图集 9 行时行号全部落在 0..8', ctxLog.length > 0 && ctxLog.every(c => c.sy >= 0 && c.sy <= 8 * CELL_H));
+  lastImg.naturalHeight = 2080;            // 复位，避免影响后续
+  await advance(4200);
+
+  console.log('\n== 10. 兜底：配置缺失时仍能跑 ==');
   // 用一个只有契约默认值的环境重跑一份引擎实例（fetch 全部失败）
   const savedFetch = global.fetch;
   global.fetch = () => Promise.reject(new Error('offline'));

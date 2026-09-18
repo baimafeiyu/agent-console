@@ -595,6 +595,33 @@ fn handle_api(shared: &Arc<Mutex<Value>>, path: &str, body: &Value) -> (u32, Val
         // 透明分层窗 + resizable/set_size 会让 WebView2 子进程崩溃（实测踩过，见交接文档）。
         "/api/menu/open" => (200, menu_open()),
         "/api/menu/close" => (200, menu_close()),
+        "/api/quit" => {
+            // 优雅退出。存在的意义是**替代 taskkill /F**：
+            // 强杀会让 WebView2 的子进程变孤儿、用户数据目录处于不一致状态
+            // （2026-09-10 那次白屏事故就是这么被反复强杀累积出来的）。
+            // 配合项目根的 restart.cmd 使用：quit → 等端口释放 → 重新拉起 exe。
+            let app = APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone());
+            match app {
+                Some(app) => {
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(150)); // 先让响应发出去
+                        app.exit(0);
+                    });
+                    (200, json!({ "ok": true }))
+                }
+                None => (200, json!({ "ok": false, "reason": "no_app" })),
+            }
+        }
+        // 实时网速：端点只读后台快照，绝不在请求里现采样（见文件顶部铁律 2）
+        "/api/netspeed" => (200, netspeed_json(false)),
+        "/api/netspeed/detail" => (200, netspeed_json(true)),
+        "/api/net/toggle" => {
+            // 一键隐藏/显示网速气泡；状态落盘，重启后保持。
+            // 不传 enabled 就取反（菜单里那一项直接 POST 空 body）
+            let cur = net_enabled();
+            let want = body.get("enabled").and_then(|v| v.as_bool());
+            (200, net_set_enabled(want.unwrap_or(!cur)))
+        }
         "/api/pet/geom" => (200, pet_geom()),
         "/api/pet/move" => {
             // 直接把宠物窗移到指定屏幕坐标（物理像素）。用于 JS 驱动拖拽与排障。
@@ -675,6 +702,7 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
     const STATIC: &[(&str, &str)] = &[
         ("/pet.html", "text/html; charset=utf-8"),
         ("/menu.html", "text/html; charset=utf-8"),
+        ("/net.html", "text/html; charset=utf-8"),
         ("/pet.json", "application/json; charset=utf-8"),
         ("/pet-behavior.json", "application/json; charset=utf-8"),
     ];
@@ -762,6 +790,348 @@ fn sprite_bytes() -> Option<&'static [u8]> {
     } else {
         Some(v.as_slice())
     }
+}
+
+/* ==================== 实时网速（GetIfTable2 差分采样） ====================
+   四条铁律（详见 skill `windows-realtime-netspeed`）：
+   1) 必须排除环回接口(Type=24) —— 否则应用自己每秒轮询走环回，空闲时会有恒定底噪
+   2) 绝不能"有请求才采样" —— 多消费者会互相截断时间窗，dt≈0 让速率失真；
+      所以这里由后台线程固定 1Hz 采样，HTTP 端点只读快照
+   3) 不按"默认路由"挑网卡 —— 实测本机流量走的网卡与路由表指向的不一致
+   4) 分项明细当一等公民 —— VPN/TUN 双计数只能靠明细看穿
+   口径：汇总所有「OperStatus=Up 且 非环回」网卡的增量（用户选定，不漏） */
+
+const NET_SAMPLE_MS: u64 = 1000;
+// 气泡窗尺寸（逻辑像素）：166x56 = 气泡卡 158x52 + 左侧 8px 尾巴让位 + 上下各 2px 余量。
+// 这样"透明死区"几乎等于气泡本身，不会像"把宠物窗加宽"那样多出一大片挡点击的区域。
+const NET_WIN_W_LP: i32 = 166;
+const NET_WIN_H_LP: i32 = 56;
+const NET_GAP_LP: i32 = 2;       // 窗口左缘与宠物窗右缘的间隙；实际视觉间距 ≈ 2+8(尾巴)=10
+const NET_HEAD_TOP_LP: i32 = 39; // 气泡顶边相对「宠物画布顶边」的偏移（与头部齐平）
+const NET_CANVAS_TOP_LP: i32 = 72; // 宠物窗内画布顶部留白（窗口 280 - 画布 208）
+
+#[derive(Clone, Copy)]
+struct NetSnap {
+    down: f64,   // 字节/秒
+    up: f64,
+    at: std::time::Instant,
+}
+
+static NET_SNAP: std::sync::OnceLock<Mutex<Option<NetSnap>>> = std::sync::OnceLock::new();
+static NET_DETAIL: std::sync::OnceLock<Mutex<Vec<(String, f64, f64)>>> = std::sync::OnceLock::new();
+static NET_ON: std::sync::OnceLock<Mutex<bool>> = std::sync::OnceLock::new();
+static NET_SIDE: std::sync::OnceLock<Mutex<bool>> = std::sync::OnceLock::new(); // true=贴在宠物右侧
+
+fn net_cfg_path() -> PathBuf {
+    project_dir().join("net-bubble.json")
+}
+fn net_state() -> &'static Mutex<bool> {
+    NET_ON.get_or_init(|| {
+        let v = read_json(&net_cfg_path(), json!({ "enabled": true }));
+        Mutex::new(v.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true))
+    })
+}
+fn net_enabled() -> bool {
+    *net_state().lock().unwrap()
+}
+fn net_set_enabled(on: bool) -> Value {
+    *net_state().lock().unwrap() = on;
+    write_json(&net_cfg_path(), &json!({ "enabled": on }));
+    json!({ "ok": true, "enabled": on })
+}
+
+/// 读一次各网卡累计字节。返回 (接口名, 累计收, 累计发)，已过滤环回与非 Up。
+#[cfg(windows)]
+unsafe fn if_totals() -> Option<Vec<(String, u64, u64)>> {
+    use windows_sys::Win32::Foundation::NO_ERROR;
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        FreeMibTable, GetIfTable2, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_TABLE2,
+    };
+    use windows_sys::Win32::NetworkManagement::Ndis::IfOperStatusUp;
+
+    let mut p: *mut MIB_IF_TABLE2 = std::ptr::null_mut();
+    if GetIfTable2(&mut p) != NO_ERROR || p.is_null() {
+        return None;
+    }
+    let t = &*p;
+    // Table 声明为 [MIB_IF_ROW2; 1]，真实长度由 NumEntries 决定
+    let rows = std::slice::from_raw_parts(t.Table.as_ptr(), t.NumEntries as usize);
+    let mut out: Vec<(String, u64, u64)> = Vec::with_capacity(rows.len());
+    for r in rows {
+        if r.OperStatus != IfOperStatusUp {
+            continue;
+        }
+        if r.Type == IF_TYPE_SOFTWARE_LOOPBACK {
+            continue; // ← 铁律 1
+        }
+        // ← 铁律 5（实测踩出来的）：排除 NDIS 过滤层接口。
+        // 每张真实网卡在 GetIfTable2 里会被它的过滤层再"复制"若干份，别名形如
+        // "<真实别名>-WFP Native MAC Layer LightWeight Filter-0000" / "-QoS Packet Scheduler-0000" /
+        // "-Native WiFi Filter Driver-0000"。这些层上报的累计字节与真实网卡**完全相同**，
+        // 于是同一份流量被算 5 遍（实测：WLAN 真速 65 K/s 被报成 328 K/s，正好 5×）。
+        // MIB_IF_ROW2_0 是位域：HardwareInterface:1, FilterInterface:1, ...（MSVC 从低位起排）
+        // → FilterInterface = bit1 = 0x02
+        if r.InterfaceAndOperStatusFlags._bitfield & 0x02 != 0 {
+            continue;
+        }
+        let cut = |a: &[u16]| -> String {
+            let n = a.iter().position(|&c| c == 0).unwrap_or(a.len());
+            String::from_utf16_lossy(&a[..n])
+        };
+        let name = cut(&r.Alias);
+        let name = if name.is_empty() { cut(&r.Description) } else { name };
+        out.push((name, r.InOctets, r.OutOctets));
+    }
+    FreeMibTable(p as *const core::ffi::c_void);
+    Some(out)
+}
+
+#[cfg(not(windows))]
+unsafe fn if_totals() -> Option<Vec<(String, u64, u64)>> {
+    None
+}
+
+/// 一个采样节拍：算增量 → 写快照 + 明细
+fn netspeed_tick(prev: &mut BTreeMap<String, (u64, u64)>, prev_at: &mut Option<std::time::Instant>) {
+    let rows = match unsafe { if_totals() } {
+        Some(r) => r,
+        None => return,
+    };
+    let now = std::time::Instant::now();
+    // 首拍把"参与统计的网卡"写进日志 —— 日后若读数偏高，看一眼日志就知道是谁在计数
+    if prev_at.is_none() {
+        let names: Vec<String> = rows.iter().map(|(n, _, _)| n.clone()).collect();
+        log_line(&format!("netspeed counting {} iface(s): {}", names.len(), names.join(" | ")));
+    }
+    let mut per: Vec<(String, f64, f64)> = Vec::new();
+    if let Some(t0) = *prev_at {
+        let dt = now.duration_since(t0).as_secs_f64().max(0.001);
+        for (name, rx, tx) in &rows {
+            // 只对"上一拍就见过"的网卡算增量；新出现的网卡本次跳过，
+            // 否则会把它的历史累计值当成"这一秒的流量"（会瞬间爆表）
+            if let Some((prx, ptx)) = prev.get(name) {
+                let d = rx.saturating_sub(*prx) as f64 / dt;
+                let u = tx.saturating_sub(*ptx) as f64 / dt;
+                if d >= 1.0 || u >= 1.0 {
+                    per.push((name.clone(), d, u));
+                }
+            }
+        }
+    }
+    let mut cur = BTreeMap::new();
+    for (name, rx, tx) in rows {
+        cur.insert(name, (rx, tx));
+    }
+    *prev = cur;
+    *prev_at = Some(now);
+
+    per.sort_by(|a, b| (b.1 + b.2).partial_cmp(&(a.1 + a.2)).unwrap_or(std::cmp::Ordering::Equal));
+    let down: f64 = per.iter().map(|x| x.1).sum();
+    let up: f64 = per.iter().map(|x| x.2).sum();
+    *NET_SNAP.get_or_init(|| Mutex::new(None)).lock().unwrap() = Some(NetSnap { down, up, at: now });
+    *NET_DETAIL.get_or_init(|| Mutex::new(Vec::new())).lock().unwrap() = per;
+}
+
+/// 字节/秒 → 显示文本（用户选定 MB/s 口径，三位有效数字防宽度跳动）
+fn fmt_speed(bps: f64) -> String {
+    if !bps.is_finite() || bps < 0.5 {
+        return "0 K/s".to_string();
+    }
+    if bps < 1024.0 {
+        return format!("{} B/s", bps.round() as u64);
+    }
+    let kb = bps / 1024.0;
+    if kb < 1024.0 {
+        return format!("{} K/s", kb.round() as u64);
+    }
+    let mb = kb / 1024.0;
+    if mb < 100.0 {
+        format!("{:.2} M/s", mb)
+    } else {
+        format!("{:.1} M/s", mb)
+    }
+}
+
+fn netspeed_json(with_detail: bool) -> Value {
+    let snap = *NET_SNAP.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let (down, up, warm, stale, age) = match snap {
+        Some(s) => {
+            let age = s.at.elapsed().as_secs_f64();
+            (s.down, s.up, false, age > 5.0, age)
+        }
+        // 启动首拍还没有"上一拍"，标记 warm（前端显示占位符而不是 0）
+        None => (0.0, 0.0, true, false, 0.0),
+    };
+    let mut v = json!({
+        "ok": true,
+        "down": down,
+        "up": up,
+        "downText": if warm { "—".to_string() } else { fmt_speed(down) },
+        "upText": if warm || stale { "—".to_string() } else { fmt_speed(up) },
+        "warm": warm,
+        "stale": stale,
+        "age": age,
+        "scope": "all",
+        "enabled": net_enabled(),
+        "side": if *NET_SIDE.get_or_init(|| Mutex::new(true)).lock().unwrap() { "right" } else { "left" },
+        "sampleMs": NET_SAMPLE_MS,
+    });
+    if with_detail {
+        let list = NET_DETAIL.get_or_init(|| Mutex::new(Vec::new())).lock().unwrap().clone();
+        let ifaces: Vec<Value> = list.iter().map(|(n, d, u)| json!({
+            "name": n, "down": d, "up": u,
+            "downText": fmt_speed(*d), "upText": fmt_speed(*u)
+        })).collect();
+        v.as_object_mut().unwrap().insert("ifaces".to_string(), json!(ifaces));
+    }
+    v
+}
+
+/// 网速气泡跟随宠物：贴右侧、与头部齐平；右侧放不下就翻到左侧
+fn net_place(pet: &tauri::WebviewWindow, net: &tauri::WebviewWindow) -> Option<(i32, i32)> {
+    let p = pet.outer_position().ok()?;
+    let ps = pet.outer_size().ok()?;
+    let ns = net.outer_size().ok()?;
+    let mon = pet.current_monitor().ok().flatten()?;
+    let sf = mon.scale_factor();
+    let gap = (NET_GAP_LP as f64 * sf).round() as i32;
+    let head = ((NET_CANVAS_TOP_LP + NET_HEAD_TOP_LP) as f64 * sf).round() as i32;
+    let y = p.y + head;
+    let right_x = p.x + ps.width as i32 + gap;
+    let mon_left = mon.position().x;
+    let mon_right = mon_left + mon.size().width as i32;
+    let (x, side_right) = if right_x + ns.width as i32 <= mon_right - 4 {
+        (right_x, true) // 正常：贴在宠物右侧
+    } else {
+        ((p.x - gap - ns.width as i32).max(mon_left + 4), false) // 越界保护：翻到左侧
+    };
+    *NET_SIDE.get_or_init(|| Mutex::new(true)).lock().unwrap() = side_right;
+    let _ = net.set_position(tauri::PhysicalPosition::new(x, y));
+    Some((x, y))
+}
+
+/// 按需创建网速气泡窗。
+/// ⚠️ 为什么不在 tauri.conf.json 里声明、而要运行时建：
+/// 实测（2026-09-18）把第 4 个透明窗写进配置后，Tauri 启动时**卡死在创建这个窗上** ——
+/// 日志显示 main/pet/petmenu 都正常取了页面，唯独没有 `/net.html` 请求，
+/// 于是 setup() 永不执行（tray 没装、宠物没落位、`/api/pet/*` 全返回 no_app）。
+/// 改成从跟随线程里建：setup 必定跑完，最坏情况只是气泡不出现，主体功能不受影响。
+fn ensure_net_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
+    if let Some(w) = app.get_webview_window("net") {
+        return Some(w);
+    }
+    let url: tauri::Url = match "http://127.0.0.1:8766/net.html".parse() {
+        Ok(u) => u,
+        Err(_) => return None,
+    };
+    let built = tauri::WebviewWindowBuilder::new(app, "net", tauri::WebviewUrl::External(url))
+        .title("网速")
+        .inner_size(NET_WIN_W_LP as f64, NET_WIN_H_LP as f64)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .resizable(false)
+        .focused(false)
+        .visible(false)
+        .additional_browser_args("--disable-gpu --disable-features=RendererCodeIntegrity")
+        .build();
+    match built {
+        Ok(w) => {
+            log_line("net window created (lazy)");
+            Some(w)
+        }
+        Err(e) => {
+            log_line(&format!("net window create failed: {}", e));
+            None
+        }
+    }
+}
+
+/// 宠物窗 + 网速气泡「整组」贴屏幕右下角（右 22 / 底 120）。
+/// 放在 server.rs 而非 main.rs，是为了复用 NET_GAP_LP，不在两处重复硬编码间隙。
+/// ⚠️ 必须把气泡宽度算进右边距 —— 否则宠物仍停在原处、气泡会被推出屏幕右侧。
+pub fn place_pet_home() {
+    let app = match APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone()) {
+        Some(a) => a,
+        None => return,
+    };
+    let pet = match app.get_webview_window("pet") {
+        Some(p) => p,
+        None => return,
+    };
+    let (ps, mon) = match (pet.outer_size().ok(), pet.current_monitor().ok().flatten()) {
+        (Some(s), Some(m)) => (s, m),
+        _ => return,
+    };
+    let sf = mon.scale_factor();
+    // 用常量而不是查窗口：气泡窗是**运行时才建**的，setup 阶段它还不存在，
+    // 若此时按 0 计算，宠物就不会给气泡让位，气泡一出现就会被推出屏幕。
+    let net_w = if net_enabled() { NET_WIN_W_LP } else { 0 };
+    let gap = if net_w > 0 { (NET_GAP_LP as f64 * sf).round() as i32 } else { 0 };
+    let margin_r = (22.0 * sf).round() as i32;
+    let margin_b = (120.0 * sf).round() as i32;
+    let x = mon.position().x + mon.size().width as i32 - (ps.width as i32 + gap + net_w) - margin_r;
+    let y = mon.position().y + mon.size().height as i32 - ps.height as i32 - margin_b;
+    let _ = pet.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
+/// 常驻跟随线程：宠物一挪窝（拖拽 / /api/pet/move / 隐藏）气泡就跟上。
+/// 独立于拖拽实现，所以任何移动路径都覆盖得到。
+pub fn start_net_follow() {
+    std::thread::spawn(move || {
+        let mut applied_enabled: Option<bool> = None;
+        let mut last_key: Option<(i32, i32, bool)> = None;
+        let mut retry_at = std::time::Instant::now();
+        loop {
+            let enabled = net_enabled();
+            if Some(enabled) != applied_enabled {
+                applied_enabled = Some(enabled);
+                last_key = None;
+                retry_at = std::time::Instant::now();
+            }
+            // 先把 AppHandle 克隆出来再放锁：建窗可能耗时，绝不占着 APP 的锁
+            let handle = APP.get().and_then(|m| m.lock().ok()).and_then(|g| g.clone());
+            if let Some(app) = handle {
+                if !enabled {
+                    // 只在状态切换后隐藏一次（(0,0,false) 作为"已隐藏"哨兵）
+                    if last_key.is_none() {
+                        if let Some(net) = app.get_webview_window("net") {
+                            let _ = net.hide();
+                        }
+                        last_key = Some((0, 0, false));
+                    }
+                } else if let Some(pet) = app.get_webview_window("pet") {
+                    let mut net = app.get_webview_window("net");
+                    if net.is_none() && std::time::Instant::now() >= retry_at {
+                        net = ensure_net_window(&app);
+                        // 建失败就 3 秒后再试，别每 80ms 刷一遍日志/重试
+                        retry_at = std::time::Instant::now() + Duration::from_secs(3);
+                    }
+                    if let Some(net) = net {
+                        let p = pet.outer_position().ok();
+                        let vis = pet.is_visible().unwrap_or(false);
+                        let key = (
+                            p.as_ref().map(|q| q.x).unwrap_or(0),
+                            p.as_ref().map(|q| q.y).unwrap_or(0),
+                            vis,
+                        );
+                        if Some(key) != last_key {
+                            last_key = Some(key);
+                            if vis {
+                                let _ = net_place(&pet, &net);
+                                let _ = net.show();
+                            } else {
+                                let _ = net.hide();
+                            }
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(80));
+        }
+    });
 }
 
 static APP: std::sync::OnceLock<Mutex<Option<tauri::AppHandle>>> = std::sync::OnceLock::new();
@@ -1002,6 +1372,15 @@ pub fn start() -> Result<(), String> {
             }
         });
     }
+    // 网速采样线程：固定 1Hz，与任何 HTTP 请求无关（端点只读它的产物）
+    std::thread::spawn(move || {
+        let mut prev: BTreeMap<String, (u64, u64)> = BTreeMap::new();
+        let mut prev_at: Option<std::time::Instant> = None;
+        loop {
+            netspeed_tick(&mut prev, &mut prev_at);
+            std::thread::sleep(Duration::from_millis(NET_SAMPLE_MS));
+        }
+    });
     log_line("http server started on 127.0.0.1:8766");
     Ok(())
 }
