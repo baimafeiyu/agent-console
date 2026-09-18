@@ -14,3 +14,4 @@ desktop.ini
 .idea/
 # 构建日志（本地诊断用）
 build.log
+stop.log
