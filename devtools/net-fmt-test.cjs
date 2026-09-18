@@ -86,20 +86,29 @@ check('4.9 MB/s 仍是活跃档', level(4.9 * K * K) === '');
 console.log('\n== 4. 页面结构（查 HTML 源，桩不解析 DOM）==');
 check('用内联 SVG 椭圆（不再是 CSS 圆角矩形）',
   /id="netSvg"/.test(html) && !/id="bubble"/.test(html));
-check('卡 136x44：两端全圆 r=22 的椭圆路径存在',
-  /M38 2 C68 0 100 0 130 2/.test(html) && /152 24/.test(html));
+check('卡 106x44：两端全圆 r=22 的椭圆路径存在',
+  /M38 2 C58 0 80 0 100 2/.test(html) && /122 24/.test(html));
+check('窗口 144x56（卡收到 106 后同步收紧）',
+  /viewBox="0 0 144 56"/.test(html) && /width="144"/.test(html));
+check('已去掉「下行/上行」文字标签（箭头+配色承担）',
+  !/>下行</.test(html) && !/>上行</.test(html) && /id="arrows"/.test(html));
 check('墨线带手绘抖动滤镜', /feTurbulence/.test(html) && /feDisplacementMap/.test(html));
-check('月牙高光 + 弧形箭头（圆头曲线，不是 ↓↑ 字形）',
+check('弧线箭头是圆头曲线（不是带锐角的箭头字形）',
   /stroke-linecap="round"/.test(html) && !/↓|↑/.test(html));
-check('左右两套锥形曲线尾（翻到左侧时尾巴朝右）',
+check('左右两套锥形曲线尾（翻边时尾巴朝右）',
   /id="tailL"/.test(html) && /id="tailR"/.test(html));
 check('两个数值槽初始显示占位符 ——',
   /id="vl1"[^>]*>\u2014<\/text>/.test(html) && /id="vl2"[^>]*>\u2014<\/text>/.test(html));
-check('两行标签为下行 / 上行', /id="lb1"[^>]*>下行</.test(html) && /id="lb2"[^>]*>上行</.test(html));
+check('明细模式的网卡名槽存在且默认隐藏',
+  /class="v dim hide"[^>]*id="nm1"/.test(html) && /id="nm2"/.test(html));
+check('网卡名槽用 showName 带上 v dim 样式（不会被清成默认黑字）',
+  /function showName/.test(js) && /showName\(nm1, true/.test(js));
+check('数值超长会自动缩字号（避免撑破 106 宽的卡）',
+  /function fitVals/.test(js) && /getComputedTextLength/.test(js));
 check('声明了 1 秒轮询', /setInterval\(pull,\s*1000\)/.test(js));
 check('声明了自热重载', /checkReload\(/.test(js) && /location\.reload\(\)/.test(js));
 check('文字层在过滤组之外（否则数字会被抖糊）',
-  !/<text[^>]*filter=/.test(html) && /<\/g><\/g>\s*<path[^>]*月牙|<\/g><\/g>/.test(html));
+  !/<text[^>]*filter=/.test(html));
 
 console.log('\n== 5. 与 Rust 侧同口径的锚点值 ==');
 check('fmt_speed 的四个档位在 JS 侧一致（B/s 档只有 <1024 才出现）',

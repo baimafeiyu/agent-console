@@ -1,16 +1,15 @@
 <!doctype html>
-<!-- net-ver: 2026-09-18-02-anime -->
+<!-- net-ver: 2026-09-18-03-compact -->
 <html>
 <head>
 <meta charset="utf-8">
 <style>
   html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none}
-  /* 窗口仍是 166x56：尾巴是横向伸出的，所以不占垂直空间 —— 无需重编译 */
-  #wrap{position:absolute;left:0;top:0;width:166px;height:56px;cursor:pointer}
+  /* 窗口 144x56：卡 106x44 + 左右各 14px 尾巴让位（翻边时用另一侧） */
+  #wrap{position:absolute;left:0;top:0;width:144px;height:56px;cursor:pointer}
   /* overflow:visible 才能让阴影/抖动溢出 SVG 盒子而不被裁掉 */
   #wrap svg{display:block;overflow:visible}
   /* SVG 文字要用 fill（用 color 不生效） */
-  .k{fill:#A9C4E8;font:11px "Microsoft YaHei",sans-serif;letter-spacing:.02em}
   .v{fill:#F7F4F0;font:500 12.5px "Microsoft YaHei",sans-serif;letter-spacing:.02em;
     font-variant-numeric:tabular-nums}
   .v.dim{fill:#6F7EAD;font-weight:400}
@@ -20,44 +19,46 @@
 </head>
 <body>
 <div id="wrap">
-  <!-- 卡 136x44 饱满椭圆（两端全圆 r=22 + 上下缘微鼓）+ 左侧锥形曲线尾（朝宠物） -->
-  <svg id="netSvg" viewBox="0 0 166 56" width="166" height="56" role="img">
+  <!-- 卡 106x44 饱满椭圆（两端全圆 r=22 + 上下缘微鼓）+ 锥形曲线尾
+       不再放「下行/上行」文字：弧形箭头 + 青/蓝紫配色已经区分上下行，
+       去掉标签后卡片从 136 收到 106，中段空档从 ~39px 降到 ~26px -->
+  <svg id="netSvg" viewBox="0 0 144 56" width="144" height="56" role="img">
     <title id="netTip"></title>
     <defs>
       <linearGradient id="netGA" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#1E3A6E"/><stop offset="1" stop-color="#0E1838"/>
       </linearGradient>
-      <filter id="netInk" x="-16%" y="-34%" width="132%" height="176%">
+      <filter id="netInk" x="-18%" y="-34%" width="136%" height="176%">
         <feTurbulence type="fractalNoise" baseFrequency="0.022 0.03" numOctaves="2" seed="7" result="n"/>
         <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/>
       </filter>
-      <filter id="netSh" x="-22%" y="-46%" width="144%" height="196%">
+      <filter id="netSh" x="-24%" y="-46%" width="148%" height="196%">
         <feDropShadow dx="0" dy="4" stdDeviation="4.5" flood-color="#060A20" flood-opacity="0.45"/>
       </filter>
     </defs>
     <g filter="url(#netSh)"><g filter="url(#netInk)">
       <path id="tailL" d="M30 20 C18 26 8 32 2 39 C10 38 20 36 30 34 Z"
             fill="#17305C" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
-      <path id="tailR" class="hide" d="M138 20 C150 26 160 32 166 39 C158 38 148 36 138 34 Z"
+      <path id="tailR" class="hide" d="M108 20 C120 26 130 32 136 39 C128 38 118 36 108 34 Z"
             fill="#17305C" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M38 2 C68 0 100 0 130 2 C142 2 152 12 152 24 C152 36 142 46 130 46
-               C100 48 68 48 38 46 C26 46 16 36 16 24 C16 12 26 2 38 2 Z"
+      <path d="M38 2 C58 0 80 0 100 2 C112 2 122 12 122 24 C122 36 112 46 100 46
+               C80 48 58 48 38 46 C26 46 16 36 16 24 C16 12 26 2 38 2 Z"
             fill="url(#netGA)" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
     </g></g>
     <!-- 月牙高光：沿内侧上缘的一道弧形笔触 -->
-    <path d="M34 8 C54 3 84 2 106 5" fill="none" stroke="#F7F4F0" stroke-opacity="0.24"
+    <path d="M30 8 C48 3 76 2 100 5" fill="none" stroke="#F7F4F0" stroke-opacity="0.24"
           stroke-width="3" stroke-linecap="round"/>
-    <!-- 弧形箭头：圆头曲线，取代带锐角的箭头字形 -->
-    <g id="arrows" fill="none" stroke-width="1.8" stroke-linecap="round">
-      <path d="M24 12 C25.4 14.4 25.4 17 24 19.6" stroke="#5AA9E6"/>
-      <path d="M20.8 16.6 C22.5 18.7 25.5 18.7 27.2 16.6" stroke="#5AA9E6"/>
-      <path d="M24 37 C25.4 34.6 25.4 32 24 29.4" stroke="#8FC4EE"/>
-      <path d="M20.8 32.4 C22.5 30.3 25.5 30.3 27.2 32.4" stroke="#8FC4EE"/>
+    <!-- 弧形箭头：圆头曲线，取代带锐角的箭头字形。它现在同时承担「指示方向」与「区分上下行」 -->
+    <g id="arrows" fill="none" stroke-width="2" stroke-linecap="round">
+      <path d="M32 11 C33.6 13.8 33.6 17.2 32 20" stroke="#5AA9E6"/>
+      <path d="M28 16.4 C30 18.9 34 18.9 36 16.4" stroke="#5AA9E6"/>
+      <path d="M32 36 C33.6 33.2 33.6 29.8 32 27" stroke="#8FC4EE"/>
+      <path d="M28 30.6 C30 28.1 34 28.1 36 30.6" stroke="#8FC4EE"/>
     </g>
-    <text class="k" id="lb1" x="34" y="20">下行</text>
-    <text class="v" id="vl1" x="144" y="20" text-anchor="end">—</text>
-    <text class="k" id="lb2" x="34" y="36">上行</text>
-    <text class="v" id="vl2" x="144" y="36" text-anchor="end">—</text>
+    <text class="v" id="vl1" x="110" y="20" text-anchor="end">—</text>
+    <text class="v" id="vl2" x="110" y="36" text-anchor="end">—</text>
+    <text class="v dim hide" id="nm1" x="28" y="20"></text>
+    <text class="v dim hide" id="nm2" x="28" y="36"></text>
   </svg>
 </div>
 <script>
@@ -69,8 +70,8 @@
   var arrows = document.getElementById('arrows');
   var tailL = document.getElementById('tailL');
   var tailR = document.getElementById('tailR');
-  var lb1 = document.getElementById('lb1'), vl1 = document.getElementById('vl1');
-  var lb2 = document.getElementById('lb2'), vl2 = document.getElementById('vl2');
+  var vl1 = document.getElementById('vl1'), vl2 = document.getElementById('vl2');
+  var nm1 = document.getElementById('nm1'), nm2 = document.getElementById('nm2');
 
   /* 值 → 文字。与 Rust 侧 fmt_speed 同口径（三位有效数字，防宽度跳动） */
   function fmt(bps) {
@@ -86,14 +87,48 @@
     if (bps < 8 * K) return ' dim';
     return bps >= 5 * K * K ? ' fast' : '';
   }
-  function setV(el, txt, cls) {
-    el.textContent = txt;
-    el.setAttribute('class', 'v' + cls);
+  /* 明细模式专用紧凑格式：卡片只有 106 宽，网卡名要占左边，
+     所以数值必须短（5.11 M/s → 5.1M），否则会和网卡名撞上 */
+  function fmtShort(bps) {
+    if (!isFinite(bps) || bps < 512) return '0K';
+    if (bps < K * K) return Math.round(bps / K) + 'K';
+    var mb = bps / K / K;
+    return (mb < 10 ? mb.toFixed(1) : String(Math.round(mb))) + 'M';
   }
-
   /* 测试缝：给 devtools/net-fmt-test.cjs 用来锁定显示口径（与 Rust fmt_speed 必须一致） */
   window.__netFmt = fmt;
   window.__netLevel = level;
+  window.__netFmtShort = fmtShort;
+
+  function setV(el, txt, cls) {
+    if (el.textContent !== txt) el.textContent = txt;
+    var c = 'v' + cls;
+    if (el.getAttribute('class') !== c) el.setAttribute('class', c);
+  }
+  function show(el, on) { el.setAttribute('class', on ? '' : 'hide'); }
+  /* 网卡名槽：可见时要带上 "v dim" 样式（show() 会把 class 清空 → 文字会掉回默认黑色） */
+  function showName(el, on, txt) {
+    if (el.textContent !== (txt || '')) el.textContent = txt || '';
+    var c = on ? 'v dim' : 'hide';
+    if (el.getAttribute('class') !== c) el.setAttribute('class', c);
+  }
+
+  /* 数值位数变化时自动缩字号，避免超出卡片（106 宽内可用约 66px） */
+  var lastFit = -1;
+  function fitVals() {
+    var MAXW = 66, need = 12.5;
+    [vl1, vl2].forEach(function (el) {
+      el.setAttribute('font-size', '12.5');
+      var w = 0;
+      try { w = el.getComputedTextLength(); } catch (e) { w = 0; }
+      if (w > MAXW) need = Math.min(need, 12.5 * MAXW / w);
+    });
+    need = Math.max(9, Math.round(need * 10) / 10);
+    if (need !== lastFit) {
+      lastFit = need;
+      [vl1, vl2].forEach(function (el) { el.setAttribute('font-size', String(need)); });
+    }
+  }
 
   /* 非对称 EMA：升快（0.5）降更快（0.7），否则下载结束后要好几秒才落到 0 */
   var emaD = null, emaU = null;
@@ -107,32 +142,35 @@
   var lastD = null, lastU = null;
 
   function render(d) {
-    // 翻到宠物左侧时尾巴要朝右
-    var left = (d.side === 'left');
-    tailL.setAttribute('class', left ? 'hide' : '');
-    tailR.setAttribute('class', left ? '' : 'hide');
+    var left = (d.side === 'left');   // 翻到宠物左侧时尾巴朝右
+    show(tailL, !left);
+    show(tailR, left);
 
-    if (mode === 'detail' && Array.isArray(d.ifaces) && d.ifaces.length) {
-      arrows.setAttribute('class', 'hide');
+    var detail = (mode === 'detail' && Array.isArray(d.ifaces) && d.ifaces.length);
+    show(arrows, !detail);
+
+    if (detail) {
       var a = d.ifaces[0], b = d.ifaces[1];
-      setV(vl1, a ? fmt(a.down) : '—', a ? level(a.down) : ' dim');
-      lb1.textContent = shortName(a);
-      if (b) { setV(vl2, fmt(b.down), level(b.down)); lb2.textContent = shortName(b); }
-      else { setV(vl2, '—', ' dim'); lb2.textContent = ''; }
-      return;
+      showName(nm1, true, shortName(a));
+      showName(nm2, true, shortName(b));
+      setV(vl1, a ? fmtShort(a.down) : '—', a ? level(a.down) : ' dim');
+      setV(vl2, b ? fmtShort(b.down) : '—', b ? level(b.down) : ' dim');
+    } else {
+      showName(nm1, false);
+      showName(nm2, false);
+      var blank = d.stale || d.warm;
+      setV(vl1, blank ? '—' : fmt(emaD === null ? d.down : emaD),
+        blank ? ' dim' : level(emaD === null ? 0 : emaD));
+      setV(vl2, blank ? '—' : fmt(emaU === null ? d.up : emaU),
+        blank ? ' dim' : level(emaU === null ? 0 : emaU));
     }
-    arrows.setAttribute('class', '');
-    lb1.textContent = '下行';
-    lb2.textContent = '上行';
-    var blank = d.stale || d.warm;
-    setV(vl1, blank ? '—' : fmt(emaD === null ? d.down : emaD), blank ? ' dim' : level(emaD === null ? 0 : emaD));
-    setV(vl2, blank ? '—' : fmt(emaU === null ? d.up : emaU), blank ? ' dim' : level(emaU === null ? 0 : emaU));
-    if (tip) tip.textContent = '点击切换「总速 / 分网卡明细」· 每 ' + Math.round((d.sampleMs || 1000) / 1000) + ' 秒采样';
+    fitVals();
+    if (tip) tip.textContent = '下行 / 上行 · 点击切换「总速 / 分网卡明细」';
   }
   function shortName(x) {
     if (!x) return '';
     var s = String(x.name || '');
-    return s.length > 4 ? s.slice(0, 4) : s;   // 卡片只有 136 宽，名字必须截断
+    return s.length > 4 ? s.slice(0, 4) : s;
   }
 
   function pull() {

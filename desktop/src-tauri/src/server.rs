@@ -381,7 +381,7 @@ fn dsh_info() -> Value {
 
 /* ---------------- API 处理 ---------------- */
 
-fn json_response(mut req: tiny_http::Request, code: u32, body: Value) {
+fn json_response(req: tiny_http::Request, code: u32, body: Value) {
     let header = Header::from_bytes("Content-Type", "application/json; charset=utf-8").unwrap();
     let header2 = Header::from_bytes("Cache-Control", "no-store").unwrap();
     let resp = Response::from_string(body.to_string())
@@ -817,9 +817,10 @@ fn sprite_bytes() -> Option<&'static [u8]> {
    口径：汇总所有「OperStatus=Up 且 非环回」网卡的增量（用户选定，不漏） */
 
 const NET_SAMPLE_MS: u64 = 1000;
-// 气泡窗尺寸（逻辑像素）：166x56 = 气泡卡 158x52 + 左侧 8px 尾巴让位 + 上下各 2px 余量。
-// 这样"透明死区"几乎等于气泡本身，不会像"把宠物窗加宽"那样多出一大片挡点击的区域。
-const NET_WIN_W_LP: i32 = 166;
+// 气泡窗尺寸（逻辑像素）：144x56 = 气泡卡 106x44 + 左右各 14px 尾巴让位（翻边时用另一侧）+ 余量。
+// 卡从 136 收到 106（去掉「下行/上行」文字标签，箭头+青/蓝紫配色已足够区分），
+// 窗口也从 166 收到 144 —— 透明死区只在卡片右侧剩 ~22px，不会多挡桌面。
+const NET_WIN_W_LP: i32 = 144;
 const NET_WIN_H_LP: i32 = 56;
 // 间隙默认值（可被 net-bubble.json 的 gapLp 覆盖，改完 2 秒内生效、不用重编译）。
 // 为什么是负数：宠物素材在画布右侧**本来就留了 23~27px 透明边**（实测 idle/waving 等行的
