@@ -622,6 +622,21 @@ fn handle_api(shared: &Arc<Mutex<Value>>, path: &str, body: &Value) -> (u32, Val
             let want = body.get("enabled").and_then(|v| v.as_bool());
             (200, net_set_enabled(want.unwrap_or(!cur)))
         }
+        "/api/net/config" => {
+            // 网速气泡的运行时微调：{"gapLp": -24} 调远近，{"enabled": true} 开关。
+            // 不带参数则回读当前配置。都会落盘 net-bubble.json（也可手改文件，2 秒内生效）。
+            if let Some(g) = body.get("gapLp").and_then(|v| v.as_i64()) {
+                (200, net_set_gap(g as i32))
+            } else if let Some(e) = body.get("enabled").and_then(|v| v.as_bool()) {
+                (200, net_set_enabled(e))
+            } else {
+                let c = net_cfg_get();
+                (200, json!({
+                    "ok": true, "enabled": c.enabled, "gapLp": c.gap_lp,
+                    "range": { "min": NET_GAP_LP_MIN, "max": NET_GAP_LP_MAX }
+                }))
+            }
+        }
         "/api/pet/geom" => (200, pet_geom()),
         "/api/pet/move" => {
             // 直接把宠物窗移到指定屏幕坐标（物理像素）。用于 JS 驱动拖拽与排障。
@@ -806,7 +821,14 @@ const NET_SAMPLE_MS: u64 = 1000;
 // 这样"透明死区"几乎等于气泡本身，不会像"把宠物窗加宽"那样多出一大片挡点击的区域。
 const NET_WIN_W_LP: i32 = 166;
 const NET_WIN_H_LP: i32 = 56;
-const NET_GAP_LP: i32 = 2;       // 窗口左缘与宠物窗右缘的间隙；实际视觉间距 ≈ 2+8(尾巴)=10
+// 间隙默认值（可被 net-bubble.json 的 gapLp 覆盖，改完 2 秒内生效、不用重编译）。
+// 为什么是负数：宠物素材在画布右侧**本来就留了 23~27px 透明边**（实测 idle/waving 等行的
+// 内容右边界只到 x≈168，画布宽 192），所以按"窗口右缘 + 正间隙"摆会显得离得很远。
+// 取 -18 时，视觉间距从 ~34px 收到 ~14px；而素材里最宽的动作（wushu/taichi 到 x≈191）
+// 也只在气泡尾巴那条 8px 竖带上被压住一点点，不会盖住身体。
+const NET_GAP_LP_DEFAULT: i32 = -18;
+const NET_GAP_LP_MIN: i32 = -60;  // 再往里就会盖住宠物身体了
+const NET_GAP_LP_MAX: i32 = 60;
 const NET_HEAD_TOP_LP: i32 = 39; // 气泡顶边相对「宠物画布顶边」的偏移（与头部齐平）
 const NET_CANVAS_TOP_LP: i32 = 72; // 宠物窗内画布顶部留白（窗口 280 - 画布 208）
 
@@ -817,27 +839,56 @@ struct NetSnap {
     at: std::time::Instant,
 }
 
+/// 气泡的开关与位置微调。落盘在 net-bubble.json，运行时可改（跟随线程每 2 秒回读一次）。
+#[derive(Clone, Copy)]
+struct NetCfg {
+    enabled: bool,
+    gap_lp: i32,
+}
+
 static NET_SNAP: std::sync::OnceLock<Mutex<Option<NetSnap>>> = std::sync::OnceLock::new();
 static NET_DETAIL: std::sync::OnceLock<Mutex<Vec<(String, f64, f64)>>> = std::sync::OnceLock::new();
-static NET_ON: std::sync::OnceLock<Mutex<bool>> = std::sync::OnceLock::new();
+static NET_CFG: std::sync::OnceLock<Mutex<NetCfg>> = std::sync::OnceLock::new();
 static NET_SIDE: std::sync::OnceLock<Mutex<bool>> = std::sync::OnceLock::new(); // true=贴在宠物右侧
 
 fn net_cfg_path() -> PathBuf {
     project_dir().join("net-bubble.json")
 }
-fn net_state() -> &'static Mutex<bool> {
-    NET_ON.get_or_init(|| {
-        let v = read_json(&net_cfg_path(), json!({ "enabled": true }));
-        Mutex::new(v.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true))
-    })
+/// 从磁盘读配置（缺字段就用默认值）
+fn net_cfg_load() -> NetCfg {
+    let v = read_json(&net_cfg_path(), json!({}));
+    let gap = v.get("gapLp").and_then(|n| n.as_i64()).unwrap_or(NET_GAP_LP_DEFAULT as i64);
+    NetCfg {
+        enabled: v.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true),
+        gap_lp: (gap as i32).clamp(NET_GAP_LP_MIN, NET_GAP_LP_MAX),
+    }
+}
+fn net_cfg_slot() -> &'static Mutex<NetCfg> {
+    NET_CFG.get_or_init(|| Mutex::new(net_cfg_load()))
+}
+fn net_cfg_get() -> NetCfg {
+    *net_cfg_slot().lock().unwrap()
 }
 fn net_enabled() -> bool {
-    *net_state().lock().unwrap()
+    net_cfg_get().enabled
+}
+/// 跟随线程定期调用：让用户直接改 net-bubble.json 就能调，无需重启应用
+fn net_cfg_reload() {
+    let fresh = net_cfg_load();
+    *net_cfg_slot().lock().unwrap() = fresh;
+}
+fn net_persist() -> Value {
+    let c = net_cfg_get();
+    write_json(&net_cfg_path(), &json!({ "enabled": c.enabled, "gapLp": c.gap_lp }));
+    json!({ "ok": true, "enabled": c.enabled, "gapLp": c.gap_lp })
 }
 fn net_set_enabled(on: bool) -> Value {
-    *net_state().lock().unwrap() = on;
-    write_json(&net_cfg_path(), &json!({ "enabled": on }));
-    json!({ "ok": true, "enabled": on })
+    net_cfg_slot().lock().unwrap().enabled = on;
+    net_persist()
+}
+fn net_set_gap(gap: i32) -> Value {
+    net_cfg_slot().lock().unwrap().gap_lp = gap.clamp(NET_GAP_LP_MIN, NET_GAP_LP_MAX);
+    net_persist()
 }
 
 /// 读一次各网卡累计字节。返回 (接口名, 累计收, 累计发)，已过滤环回与非 Up。
@@ -973,6 +1024,7 @@ fn netspeed_json(with_detail: bool) -> Value {
         "age": age,
         "scope": "all",
         "enabled": net_enabled(),
+        "gapLp": net_cfg_get().gap_lp,
         "side": if *NET_SIDE.get_or_init(|| Mutex::new(true)).lock().unwrap() { "right" } else { "left" },
         "sampleMs": NET_SAMPLE_MS,
     });
@@ -994,7 +1046,7 @@ fn net_place(pet: &tauri::WebviewWindow, net: &tauri::WebviewWindow) -> Option<(
     let ns = net.outer_size().ok()?;
     let mon = pet.current_monitor().ok().flatten()?;
     let sf = mon.scale_factor();
-    let gap = (NET_GAP_LP as f64 * sf).round() as i32;
+    let gap = (net_cfg_get().gap_lp as f64 * sf).round() as i32;
     let head = ((NET_CANVAS_TOP_LP + NET_HEAD_TOP_LP) as f64 * sf).round() as i32;
     let y = p.y + head;
     let right_x = p.x + ps.width as i32 + gap;
@@ -1068,8 +1120,9 @@ pub fn place_pet_home() {
     let sf = mon.scale_factor();
     // 用常量而不是查窗口：气泡窗是**运行时才建**的，setup 阶段它还不存在，
     // 若此时按 0 计算，宠物就不会给气泡让位，气泡一出现就会被推出屏幕。
-    let net_w = if net_enabled() { NET_WIN_W_LP } else { 0 };
-    let gap = if net_w > 0 { (NET_GAP_LP as f64 * sf).round() as i32 } else { 0 };
+    let cfg = net_cfg_get();
+    let net_w = if cfg.enabled { NET_WIN_W_LP } else { 0 };
+    let gap = if net_w > 0 { (cfg.gap_lp as f64 * sf).round() as i32 } else { 0 };
     let margin_r = (22.0 * sf).round() as i32;
     let margin_b = (120.0 * sf).round() as i32;
     let x = mon.position().x + mon.size().width as i32 - (ps.width as i32 + gap + net_w) - margin_r;
@@ -1082,10 +1135,24 @@ pub fn place_pet_home() {
 pub fn start_net_follow() {
     std::thread::spawn(move || {
         let mut applied_enabled: Option<bool> = None;
+        let mut applied_gap: Option<i32> = None;
         let mut last_key: Option<(i32, i32, bool)> = None;
         let mut retry_at = std::time::Instant::now();
+        let mut reload_at = std::time::Instant::now() + Duration::from_secs(2);
         loop {
-            let enabled = net_enabled();
+            // 每 2 秒回读一次 net-bubble.json → 用户直接改 gapLp/enabled 就生效，不必重启应用
+            if std::time::Instant::now() >= reload_at {
+                net_cfg_reload();
+                reload_at = std::time::Instant::now() + Duration::from_secs(2);
+            }
+            let cfg = net_cfg_get();
+            let enabled = cfg.enabled;
+            if Some(enabled) != applied_enabled || Some(cfg.gap_lp) != applied_gap {
+                applied_enabled = Some(enabled);
+                applied_gap = Some(cfg.gap_lp);
+                last_key = None; // 强制重摆：间隙变了要立刻重算位置
+                retry_at = std::time::Instant::now();
+            }
             if Some(enabled) != applied_enabled {
                 applied_enabled = Some(enabled);
                 last_key = None;
