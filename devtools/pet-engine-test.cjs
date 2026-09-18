@@ -49,8 +49,9 @@ const canvasCtx = {
 };
 function mkEl(id) {
   const handlers = {};
+  const attrs = {};
   return {
-    id, innerHTML: '', title: '', style: {},
+    id, innerHTML: '', textContent: '', title: '', style: {},
     classList: {
       _s: new Set(),
       add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); },
@@ -59,6 +60,11 @@ function mkEl(id) {
     addEventListener(t, f) { handlers[t] = f; },
     _fire(t, e) { if (handlers[t]) handlers[t](e || {}); },
     _has(t) { return !!handlers[t]; },
+    setAttribute(k, v) { attrs[k] = String(v); },
+    getAttribute(k) { return (k in attrs) ? attrs[k] : null; },
+    /* 余量气泡改用内联 SVG，文字靠 textContent + class，
+       字号自适应靠 getComputedTextLength —— 桩里给个粗估即可 */
+    getComputedTextLength() { return String(this.textContent || '').length * 11; },
     querySelector() { return mkEl('q'); },
     contains() { return false; },
     getContext() { return canvasCtx; }
@@ -149,7 +155,38 @@ function frameAdvanced() {
   await advance(400);
   check('读取到 pet.json 并进入 idle（row 0）', currentName() === 'idle', currentName());
   check('帧号在推进（不是卡在单帧）', frameAdvanced());
-  check('气泡渲染了两行状态', /Go 本月/.test(els.status.innerHTML) && /DeepSeek/.test(els.status.innerHTML));
+  // 余量气泡（动漫化内联 SVG）：文字写进 stGo / stDs，色阶走 class
+  //   FAKE_USAGE=18 → Go 已用 18% → 余 82%（<70 不告警 → class 仅 "v"）
+  //   ds=1.23 → <5 → hot 档
+  check('两行标签在 HTML 源码里（Go 本月 / DeepSeek）',
+    /class="k"[^>]*>Go 本月</.test(html) && /class="k"[^>]*>DeepSeek</.test(html));
+  check('余量气泡用的是 SVG 椭圆+下向尾（不是旧的 div#status）',
+    /id="statusSvg"/.test(html) && !/id="status"/.test(html));
+  check('墨线带手绘抖动滤镜', /feTurbulence/.test(html) && /feDisplacementMap/.test(html));
+  check('Go 余量按数据算出「余 82%」', els.stGo.textContent === '余 82%', els.stGo.textContent);
+  check('DeepSeek 余额写成「¥ 1.23」', els.stDs.textContent === '¥ 1.23', els.stDs.textContent);
+  check('余额 <5 → hot 档', els.stDs.getAttribute('class') === 'v hot', els.stDs.getAttribute('class'));
+  check('用量 18% 不告警 → 仅 "v" 类', els.stGo.getAttribute('class') === 'v', els.stGo.getAttribute('class'));
+  check('余量气泡初始可见、台词气泡隐藏',
+    els.statusSvg.style.display !== 'none' && els.msgSvg.style.display === 'none',
+    els.statusSvg.style.display + ' / ' + els.msgSvg.style.display);
+
+  console.log('\n== 1b. 台词气泡临时顶替余量气泡，超时后恢复 ==');
+  check('默认不显示台词气泡', els.msgSvg.style.display === 'none');
+  check('台词字号默认初始化为 12px', els.msgTxt.getAttribute('font-size') === '12',
+    String(els.msgTxt.getAttribute('font-size')));
+  els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
+  winHandlers.mouseup({ button: 0 });
+  await advance(200);
+  check('点一下 → 台词气泡接管、余量气泡让位',
+    els.statusSvg.style.display === 'none' && els.msgSvg.style.display === '',
+    els.statusSvg.style.display + ' / ' + els.msgSvg.style.display);
+  check('台词文字已写入单行气泡', String(els.msgTxt.textContent || '').length > 0, els.msgTxt.textContent);
+  await advance(4200);
+  check('超时后恢复显示余量气泡',
+    els.statusSvg.style.display !== 'none' && els.msgSvg.style.display === 'none',
+    els.statusSvg.style.display + ' / ' + els.msgSvg.style.display);
+  await advance(2000);
 
   console.log('\n== 2. 悬停 → waiting（row 6）==');
   els.pet._fire('mouseenter');
@@ -167,7 +204,7 @@ function frameAdvanced() {
     winHandlers.mouseup({ button: 0 });
     await advance(120);
     clickTracks.push(currentName());
-    clickQuips.push((els.status.innerHTML.match(/s-msg">([^<]*)</) || [])[1] || '');
+    clickQuips.push(String(els.msgTxt.textContent || ''));
     await advance(4200);                  // 等这次播完（且超过连击窗口，避免叠加连击）
   }
   const uniqClick = [...new Set(clickTracks)];
@@ -200,7 +237,7 @@ function frameAdvanced() {
   winHandlers.mouseup({ button: 0 });
   await advance(120);
   check('第 4 连点升级为 failed', currentName() === 'failed', currentName());
-  check('台词出自"被戳烦"那一组', /别戳|再戳|够啦|不是按钮/.test(els.status.innerHTML), els.status.innerHTML.slice(0, 40));
+  check('台词出自"被戳烦"那一组', /别戳|再戳|够啦|不是按钮/.test(els.msgTxt.textContent), els.msgTxt.textContent);
   await advance(6000);
   check('failed 播完回落常态', currentName() === 'idle', currentName());
   els.pet._fire('mousedown', { button: 0, clientX: 10, clientY: 10 });
@@ -215,7 +252,7 @@ function frameAdvanced() {
   check('按住 500ms 尚未触发摸头', currentName() !== 'review', currentName());
   await advance(400);                     // 累计 900ms > holdMs 800
   check('长按满 800ms 触发摸头（review）', currentName() === 'review', currentName());
-  check('摸头台词出现', /摸头|舒服|再摸/.test(els.status.innerHTML), els.status.innerHTML.slice(0, 40));
+  check('摸头台词出现', /摸头|舒服|再摸/.test(els.msgTxt.textContent), els.msgTxt.textContent);
   winHandlers.mouseup({ button: 0 });
   await advance(250);
   check('松手即回常态（不再停留在 review）', currentName() !== 'review', currentName());

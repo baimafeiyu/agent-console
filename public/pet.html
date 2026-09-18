@@ -10,38 +10,72 @@
   #pet{display:block;width:192px;height:208px;cursor:grab}
   #pet:active{cursor:grabbing}
 
-  /* ---------- 头顶常驻状态气泡 ---------- */
-  #status{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
-    margin-bottom:9px;width:180px;box-sizing:border-box;padding:7px 11px 8px;
-    border-radius:12px;color:#f4f7ff;z-index:6;pointer-events:none;
-    font:11.5px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em;
-    background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
-    border:1px solid rgba(126,152,255,.42);box-shadow:0 6px 18px rgba(2,6,23,.42)}
-  /* 指向头顶的小尾巴：描边层 + 填充层两个三角叠出来 */
-  #status::before{content:'';position:absolute;left:50%;bottom:-8px;margin-left:-7px;
-    width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;
-    border-top:7px solid rgba(126,152,255,.42)}
-  #status::after{content:'';position:absolute;left:50%;bottom:-6px;margin-left:-6px;
-    width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
-    border-top:6px solid #0a0f22}
-  #status .s-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
-  #status .s-row + .s-row{margin-top:3px}
-  #status .s-k{color:#9fb0e8;font-size:11px;white-space:nowrap}
-  #status .s-v{color:#f4f7ff;font-weight:700;font-size:11.5px;
-    font-variant-numeric:tabular-nums;white-space:nowrap}
-  #status .s-v.warn{color:#f0c978}
-  #status .s-v.hot{color:#ff958d}
-  #status .s-v.dim{color:#6f7ead;font-weight:400}
-  /* 互动消息模式：临时顶替状态内容 */
-  #status.msg{padding:8px 12px}
-  #status.msg::before,#status.msg::after{display:none}
-  #status .s-msg{font-size:11.5px;color:#f4f7ff;text-align:center;line-height:1.45}
+  /* ---------- 头顶余量气泡（动漫化 · A 墨蓝弧 · 130×44 紧凑档） ----------
+     用内联 SVG 而不是 CSS：锥形曲线尾与手绘抖动 CSS 画不出来。
+     形状层套 feTurbulence+feDisplacementMap 做手绘画笔触，文字层放在过滤组外（否则数字被抖糊）。 */
+  #bubWrap{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+    margin-bottom:4px;z-index:6;pointer-events:none;line-height:0}
+  /* overflow:visible 才能让阴影/抖动溢出 SVG 盒子而不被裁掉 */
+  #bubWrap svg{display:block;overflow:visible;margin:0 auto}
+  /* 注意：SVG 文字要用 fill（用 color 不生效） */
+  .k{fill:#A9C4E8;font:11px "Microsoft YaHei",sans-serif;letter-spacing:.02em}
+  .v{fill:#F7F4F0;font:500 12.5px "Microsoft YaHei",sans-serif;letter-spacing:.02em;
+    font-variant-numeric:tabular-nums}
+  .v.warn{fill:#F0C978}
+  .v.hot{fill:#FF958D}
+  .v.dim{fill:#6F7EAD;font-weight:400}
+  .msg-t{fill:#F7F4F0;font:12px "Microsoft YaHei",sans-serif;
+    text-anchor:middle;letter-spacing:.02em}
 </style>
 </head>
 <body>
 <div id="anchor">
   <canvas id="pet" width="192" height="208"></canvas>
-  <div id="status"></div>
+  <!-- 共享 defs：放在常驻的 0×0 svg 里，避免两个气泡各自 hide 时引用失效 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <linearGradient id="bubGA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1E3A6E"/><stop offset="1" stop-color="#0E1838"/>
+    </linearGradient>
+    <filter id="bubInk" x="-20%" y="-30%" width="140%" height="185%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.022 0.03" numOctaves="2" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="bubSh" x="-26%" y="-40%" width="152%" height="190%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#060A20" flood-opacity="0.45"/>
+    </filter>
+  </defs></svg>
+  <div id="bubWrap">
+    <!-- 余量气泡：130×44 饱满椭圆 + 朝下的锥形曲线尾（指向头顶） -->
+    <svg id="statusSvg" viewBox="0 0 130 60" width="130" height="60" role="img">
+      <title id="stTip"></title>
+      <g filter="url(#bubSh)"><g filter="url(#bubInk)">
+        <path d="M70 38 C64 48 56 54 44 58 C52 53 58 47 56 38 Z"
+              fill="#17305C" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M22 3 C51 0 79 0 108 3 C120 3 130 10 130 22 C130 34 120 41 108 41
+                 C79 44 51 44 22 41 C10 41 0 34 0 22 C0 10 10 3 22 3 Z"
+              fill="url(#bubGA)" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+      </g></g>
+      <path d="M28 10 C46 4 74 3 98 7" fill="none" stroke="#F7F4F0" stroke-opacity="0.24"
+            stroke-width="3" stroke-linecap="round"/>
+      <text class="k" x="12" y="18">Go 本月</text>
+      <text class="v" id="stGo" x="118" y="18" text-anchor="end">—</text>
+      <text class="k" x="12" y="34">DeepSeek</text>
+      <text class="v" id="stDs" x="118" y="34" text-anchor="end">—</text>
+    </svg>
+    <!-- 互动台词：同款单行椭圆，字号按文本长度自动收缩 -->
+    <svg id="msgSvg" viewBox="0 0 150 48" width="150" height="48" style="display:none" role="img">
+      <g filter="url(#bubSh)"><g filter="url(#bubInk)">
+        <path d="M80 28 C74 37 66 43 54 46 C62 41 68 35 66 28 Z"
+              fill="#17305C" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M17 2 C55 0 95 0 133 2 C142 2 150 8 150 17 C150 26 142 32 133 32
+                 C95 34 55 34 17 32 C8 32 0 26 0 17 C0 8 8 2 17 2 Z"
+              fill="url(#bubGA)" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+      </g></g>
+      <path d="M26 9 C46 4 84 3 106 6" fill="none" stroke="#F7F4F0" stroke-opacity="0.24"
+            stroke-width="3" stroke-linecap="round"/>
+      <text class="msg-t" id="msgTxt" x="75" y="22">—</text>
+    </svg>
+  </div>
 </div>
 <script>
 (function () {
@@ -256,42 +290,69 @@
     requestAnimationFrame(tick);
   }
 
-  /* ============ 头顶常驻气泡 ============ */
-  var statusEl = document.getElementById('status');
+  /* ============ 头顶余量气泡（内联 SVG · A 墨蓝弧） ============ */
+  var stSvg = document.getElementById('statusSvg');
+  var msgSvg = document.getElementById('msgSvg');
+  var stTip = document.getElementById('stTip');
+  var stGo = document.getElementById('stGo');
+  var stDs = document.getElementById('stDs');
+  var msgTxt = document.getElementById('msgTxt');
   var SD = { goMonth: null, goRoll: null, goWeek: null, ds: null, dsAvail: null };
-  var msgToken = 0, msgTimer = null;
+  var msgToken = 0, msgTimer = null, msgOn = false;
+  // 初始可见性在 JS 里显式声明，不依赖 HTML 上的 style 属性（单一事实来源）
+  stSvg.style.display = '';
+  msgSvg.style.display = 'none';
+  if (msgTxt) msgTxt.setAttribute('font-size', '12');
 
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
-  }
   function pctClass(p) { return p >= 90 ? ' hot' : (p >= 70 ? ' warn' : ''); }
   function dsClass(v) { return v === null ? ' dim' : (v < 5 ? ' hot' : (v < 20 ? ' warn' : '')); }
+  /* SVG 文字不能改 innerHTML：只能设 textContent + class，
+     而且样式必须用 CSS 的 fill（不是 color），否则不生效 */
+  function setV(el, txt, cls) {
+    el.textContent = txt;
+    el.setAttribute('class', 'v' + cls);
+  }
 
   function applyStatus() {
-    if (statusEl.classList.contains('msg')) return;
+    if (msgOn) return;
     var goTxt, goCls;
     if (SD.goMonth === null) { goTxt = '—'; goCls = ' dim'; }
     else { goTxt = '余 ' + (100 - SD.goMonth) + '%'; goCls = pctClass(SD.goMonth); }
-    var dsTxt = (SD.ds === null) ? '—' : ('¥ ' + SD.ds);
-    statusEl.innerHTML =
-      '<div class="s-row"><span class="s-k">Go 本月</span><span class="s-v' + goCls + '">' + goTxt + '</span></div>'
-      + '<div class="s-row"><span class="s-k">DeepSeek</span><span class="s-v' + dsClass(SD.ds) + '">' + dsTxt + '</span></div>';
+    setV(stGo, goTxt, goCls);
+    setV(stDs, (SD.ds === null) ? '—' : ('¥ ' + SD.ds), dsClass(SD.ds));
     var tip = [];
     if (SD.goRoll !== null) tip.push('Go 5h 已用 ' + SD.goRoll + '%');
     if (SD.goWeek !== null) tip.push('本周 ' + SD.goWeek + '%');
     if (doingCount > 0) tip.push('进行中任务 ' + doingCount + ' 个');
     if (SD.dsAvail !== null) tip.push(SD.dsAvail ? 'DeepSeek 账户正常' : 'DeepSeek 账户异常');
-    statusEl.title = tip.join(' · ');
+    if (stTip) stTip.textContent = tip.join(' · ');
   }
+  /* 台词过长就自动缩字号，避免溢出椭圆（单行椭圆可用宽约 120px） */
+  function fitMsg() {
+    var MAXW = 120;
+    msgTxt.setAttribute('font-size', '12');
+    var w = 0;
+    try { w = msgTxt.getComputedTextLength(); } catch (e) { w = 0; }
+    if (w > MAXW) {
+      var fs = Math.max(9, Math.round(12 * MAXW / w * 10) / 10);
+      msgTxt.setAttribute('font-size', String(fs));
+    }
+  }
+  /* 互动台词：临时顶替余量内容（不再另弹第二个气泡） */
   function showBubble(txt, ms) {
     var tok = ++msgToken;
-    statusEl.classList.add('msg');
-    statusEl.innerHTML = '<div class="s-msg">' + esc(txt) + '</div>';
+    msgOn = true;
+    msgTxt.textContent = txt;
+    fitMsg();
+    stSvg.style.display = 'none';
+    msgSvg.style.display = '';
     clearTimeout(msgTimer);
     msgTimer = setTimeout(function () {
-      if (tok === msgToken) { statusEl.classList.remove('msg'); applyStatus(); }
+      if (tok !== msgToken) return;
+      msgOn = false;
+      msgSvg.style.display = 'none';
+      stSvg.style.display = '';
+      applyStatus();
     }, ms || 3800);
   }
   function quip() {
