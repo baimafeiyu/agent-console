@@ -17,9 +17,12 @@ const js = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 /* ---------- 最小 DOM 桩 ---------- */
 function mkEl(id) {
+  const attrs = {};
   return {
     id, textContent: '', innerHTML: '', className: '',
     addEventListener() { },
+    setAttribute(k, v) { attrs[k] = String(v); },
+    getAttribute(k) { return (k in attrs) ? attrs[k] : null; },
     classList: { add() { }, remove() { }, contains() { return false; } }
   };
 }
@@ -81,12 +84,22 @@ check('5 MB/s 进入高速档', level(5 * K * K) === ' fast');
 check('4.9 MB/s 仍是活跃档', level(4.9 * K * K) === '');
 
 console.log('\n== 4. 页面结构（查 HTML 源，桩不解析 DOM）==');
-check('气泡初始停靠在右侧', /id="bubble"\s+class="right"/.test(html));
+check('用内联 SVG 椭圆（不再是 CSS 圆角矩形）',
+  /id="netSvg"/.test(html) && !/id="bubble"/.test(html));
+check('卡 136x44：两端全圆 r=22 的椭圆路径存在',
+  /M38 2 C68 0 100 0 130 2/.test(html) && /152 24/.test(html));
+check('墨线带手绘抖动滤镜', /feTurbulence/.test(html) && /feDisplacementMap/.test(html));
+check('月牙高光 + 弧形箭头（圆头曲线，不是 ↓↑ 字形）',
+  /stroke-linecap="round"/.test(html) && !/↓|↑/.test(html));
+check('左右两套锥形曲线尾（翻到左侧时尾巴朝右）',
+  /id="tailL"/.test(html) && /id="tailR"/.test(html));
 check('两个数值槽初始显示占位符 ——',
-  /id="dn">\u2014<\/span>/.test(html) && /id="up">\u2014<\/span>/.test(html));
-check('带指向宠物的小尾巴（左右两套三角）', /\bbubble\.right::before\b/.test(html) && /\bbubble\.left::after\b/.test(html));
+  /id="vl1"[^>]*>\u2014<\/text>/.test(html) && /id="vl2"[^>]*>\u2014<\/text>/.test(html));
+check('两行标签为下行 / 上行', /id="lb1"[^>]*>下行</.test(html) && /id="lb2"[^>]*>上行</.test(html));
 check('声明了 1 秒轮询', /setInterval\(pull,\s*1000\)/.test(js));
 check('声明了自热重载', /checkReload\(/.test(js) && /location\.reload\(\)/.test(js));
+check('文字层在过滤组之外（否则数字会被抖糊）',
+  !/<text[^>]*filter=/.test(html) && /<\/g><\/g>\s*<path[^>]*月牙|<\/g><\/g>/.test(html));
 
 console.log('\n== 5. 与 Rust 侧同口径的锚点值 ==');
 check('fmt_speed 的四个档位在 JS 侧一致（B/s 档只有 <1024 才出现）',

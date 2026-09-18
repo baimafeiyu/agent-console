@@ -1,57 +1,80 @@
 <!doctype html>
-<!-- net-ver: 2026-09-18-01 -->
+<!-- net-ver: 2026-09-18-02-anime -->
 <html>
 <head>
 <meta charset="utf-8">
 <style>
   html,body{margin:0;padding:0;background:transparent;overflow:hidden;user-select:none}
-  /* 窗口 166x56：气泡卡 158x52 + 8px 给尾巴让位（尾巴朝向随停靠侧切换） */
-  #bubble{position:absolute;top:2px;left:8px;width:158px;height:52px;box-sizing:border-box;
-    padding:7px 10px 8px;border-radius:12px;color:#f4f7ff;cursor:pointer;
-    font:11px/1.5 "Microsoft YaHei",sans-serif;letter-spacing:.02em;
-    background:linear-gradient(160deg,rgba(19,28,54,.94),rgba(7,11,26,.97));
-    border:1px solid rgba(126,152,255,.42)}
-  #bubble.left{left:0}
-  /* 指向宠物的小尾巴：描边层 + 填充层，两个三角叠出来（与头顶气泡同一套路） */
-  #bubble::before,#bubble::after{content:'';position:absolute;top:50%;width:0;height:0}
-  #bubble.right::before{left:-8px;margin-top:-7px;border-top:7px solid transparent;
-    border-bottom:7px solid transparent;border-right:7px solid rgba(126,152,255,.42)}
-  #bubble.right::after{left:-6px;margin-top:-6px;border-top:6px solid transparent;
-    border-bottom:6px solid transparent;border-right:6px solid #0a0f22}
-  #bubble.left::before{right:-8px;margin-top:-7px;border-top:7px solid transparent;
-    border-bottom:7px solid transparent;border-left:7px solid rgba(126,152,255,.42)}
-  #bubble.left::after{right:-6px;margin-top:-6px;border-top:6px solid transparent;
-    border-bottom:6px solid transparent;border-left:6px solid #0a0f22}
-
-  .row{display:flex;justify-content:space-between;align-items:center;gap:6px;height:18px}
-  .k{color:#9fb0e8;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .arrow{font-size:11px}
-  .v{color:#f4f7ff;font-weight:700;font-size:12.5px;white-space:nowrap;
+  /* 窗口仍是 166x56：尾巴是横向伸出的，所以不占垂直空间 —— 无需重编译 */
+  #wrap{position:absolute;left:0;top:0;width:166px;height:56px;cursor:pointer}
+  /* overflow:visible 才能让阴影/抖动溢出 SVG 盒子而不被裁掉 */
+  #wrap svg{display:block;overflow:visible}
+  /* SVG 文字要用 fill（用 color 不生效） */
+  .k{fill:#A9C4E8;font:11px "Microsoft YaHei",sans-serif;letter-spacing:.02em}
+  .v{fill:#F7F4F0;font:500 12.5px "Microsoft YaHei",sans-serif;letter-spacing:.02em;
     font-variant-numeric:tabular-nums}
-  .v.dim{color:#6f7ead;font-weight:400}
-  .v.fast{color:#5ee0c0}
-  .a-down{color:#5ee0c0}
-  .a-up{color:#a8b6ff}
-  #mode{position:absolute;left:0;bottom:0;font-size:9px;color:#6f7ead;opacity:0}
+  .v.dim{fill:#6F7EAD;font-weight:400}
+  .v.fast{fill:#5EE0C0}
+  .hide{display:none}
 </style>
 </head>
 <body>
-<div id="bubble" class="right">
-  <div class="row"><span class="k"><span class="arrow a-down">↓</span> 下行</span><span class="v" id="dn">—</span></div>
-  <div class="row"><span class="k"><span class="arrow a-up">↑</span> 上行</span><span class="v" id="up">—</span></div>
+<div id="wrap">
+  <!-- 卡 136x44 饱满椭圆（两端全圆 r=22 + 上下缘微鼓）+ 左侧锥形曲线尾（朝宠物） -->
+  <svg id="netSvg" viewBox="0 0 166 56" width="166" height="56" role="img">
+    <title id="netTip"></title>
+    <defs>
+      <linearGradient id="netGA" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#1E3A6E"/><stop offset="1" stop-color="#0E1838"/>
+      </linearGradient>
+      <filter id="netInk" x="-16%" y="-34%" width="132%" height="176%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.022 0.03" numOctaves="2" seed="7" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <filter id="netSh" x="-22%" y="-46%" width="144%" height="196%">
+        <feDropShadow dx="0" dy="4" stdDeviation="4.5" flood-color="#060A20" flood-opacity="0.45"/>
+      </filter>
+    </defs>
+    <g filter="url(#netSh)"><g filter="url(#netInk)">
+      <path id="tailL" d="M30 20 C18 26 8 32 2 39 C10 38 20 36 30 34 Z"
+            fill="#17305C" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+      <path id="tailR" class="hide" d="M138 20 C150 26 160 32 166 39 C158 38 148 36 138 34 Z"
+            fill="#17305C" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M38 2 C68 0 100 0 130 2 C142 2 152 12 152 24 C152 36 142 46 130 46
+               C100 48 68 48 38 46 C26 46 16 36 16 24 C16 12 26 2 38 2 Z"
+            fill="url(#netGA)" stroke="#4090D0" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round"/>
+    </g></g>
+    <!-- 月牙高光：沿内侧上缘的一道弧形笔触 -->
+    <path d="M34 8 C54 3 84 2 106 5" fill="none" stroke="#F7F4F0" stroke-opacity="0.24"
+          stroke-width="3" stroke-linecap="round"/>
+    <!-- 弧形箭头：圆头曲线，取代带锐角的箭头字形 -->
+    <g id="arrows" fill="none" stroke-width="1.8" stroke-linecap="round">
+      <path d="M24 12 C25.4 14.4 25.4 17 24 19.6" stroke="#5AA9E6"/>
+      <path d="M20.8 16.6 C22.5 18.7 25.5 18.7 27.2 16.6" stroke="#5AA9E6"/>
+      <path d="M24 37 C25.4 34.6 25.4 32 24 29.4" stroke="#8FC4EE"/>
+      <path d="M20.8 32.4 C22.5 30.3 25.5 30.3 27.2 32.4" stroke="#8FC4EE"/>
+    </g>
+    <text class="k" id="lb1" x="34" y="20">下行</text>
+    <text class="v" id="vl1" x="144" y="20" text-anchor="end">—</text>
+    <text class="k" id="lb2" x="34" y="36">上行</text>
+    <text class="v" id="vl2" x="144" y="36" text-anchor="end">—</text>
+  </svg>
 </div>
-<span id="mode"></span>
 <script>
 (function () {
   'use strict';
   var K = 1024;
-  var bubble = document.getElementById('bubble');
-  var elDn = document.getElementById('dn');
-  var elUp = document.getElementById('up');
+  var wrap = document.getElementById('wrap');
+  var tip = document.getElementById('netTip');
+  var arrows = document.getElementById('arrows');
+  var tailL = document.getElementById('tailL');
+  var tailR = document.getElementById('tailR');
+  var lb1 = document.getElementById('lb1'), vl1 = document.getElementById('vl1');
+  var lb2 = document.getElementById('lb2'), vl2 = document.getElementById('vl2');
 
   /* 值 → 文字。与 Rust 侧 fmt_speed 同口径（三位有效数字，防宽度跳动） */
   function fmt(bps) {
-    if (!isFinite(bps) || bps < 0.5) return '0 K/s';   // 接口异常/NaN 时也不能渲染出 "NaN M/s"
+    if (!isFinite(bps) || bps < 0.5) return '0 K/s';
     if (bps < K) return Math.round(bps) + ' B/s';
     var kb = bps / K;
     if (kb < K) return Math.round(kb) + ' K/s';
@@ -63,13 +86,16 @@
     if (bps < 8 * K) return ' dim';
     return bps >= 5 * K * K ? ' fast' : '';
   }
+  function setV(el, txt, cls) {
+    el.textContent = txt;
+    el.setAttribute('class', 'v' + cls);
+  }
 
   /* 测试缝：给 devtools/net-fmt-test.cjs 用来锁定显示口径（与 Rust fmt_speed 必须一致） */
   window.__netFmt = fmt;
   window.__netLevel = level;
 
-  /* 非对称 EMA：升快（0.5）降更快（0.7）——
-     否则一次下载结束要好几秒数字才落到 0，看着像卡住 */
+  /* 非对称 EMA：升快（0.5）降更快（0.7），否则下载结束后要好几秒才落到 0 */
   var emaD = null, emaU = null;
   function smooth(prev, raw) {
     if (prev === null) return raw;
@@ -77,34 +103,36 @@
     return prev + a * (raw - prev);
   }
 
-  var mode = 'total';        // total | detail
-  var lastDrawD = null, lastDrawU = null;
+  var mode = 'total';                 // total | detail
+  var lastD = null, lastU = null;
 
   function render(d) {
-    bubble.className = (d.side === 'left' ? 'left' : 'right');
+    // 翻到宠物左侧时尾巴要朝右
+    var left = (d.side === 'left');
+    tailL.setAttribute('class', left ? 'hide' : '');
+    tailR.setAttribute('class', left ? '' : 'hide');
+
     if (mode === 'detail' && Array.isArray(d.ifaces) && d.ifaces.length) {
+      arrows.setAttribute('class', 'hide');
       var a = d.ifaces[0], b = d.ifaces[1];
-      setRow(a, '↓', b);
+      setV(vl1, a ? fmt(a.down) : '—', a ? level(a.down) : ' dim');
+      lb1.textContent = shortName(a);
+      if (b) { setV(vl2, fmt(b.down), level(b.down)); lb2.textContent = shortName(b); }
+      else { setV(vl2, '—', ' dim'); lb2.textContent = ''; }
       return;
     }
-    elDn.className = 'v' + (d.stale || d.warm ? ' dim' : level(emaD === null ? 0 : emaD));
-    elUp.className = 'v' + (d.stale || d.warm ? ' dim' : level(emaU === null ? 0 : emaU));
-    elDn.textContent = (d.stale || d.warm) ? '—' : fmt(emaD === null ? d.down : emaD);
-    elUp.textContent = (d.stale || d.warm) ? '—' : fmt(emaU === null ? d.up : emaU);
+    arrows.setAttribute('class', '');
+    lb1.textContent = '下行';
+    lb2.textContent = '上行';
+    var blank = d.stale || d.warm;
+    setV(vl1, blank ? '—' : fmt(emaD === null ? d.down : emaD), blank ? ' dim' : level(emaD === null ? 0 : emaD));
+    setV(vl2, blank ? '—' : fmt(emaU === null ? d.up : emaU), blank ? ' dim' : level(emaU === null ? 0 : emaU));
+    if (tip) tip.textContent = '点击切换「总速 / 分网卡明细」· 每 ' + Math.round((d.sampleMs || 1000) / 1000) + ' 秒采样';
   }
-  function setRow(a, arrow, b) {
-    if (!a) { elDn.textContent = '—'; elUp.textContent = '—'; return; }
-    setOne(elDn, a.name, a.down, arrow);
-    if (b) { setOne(elUp, b.name, b.down, arrow); }
-    else { elUp.className = 'v dim'; elUp.textContent = '—'; }
-  }
-  function setOne(el, name, bps, arrow) {
-    el.className = 'v' + level(bps);
-    el.textContent = shortName(name) + ' ' + fmt(bps);
-  }
-  function shortName(n) {
-    var s = String(n || '');
-    return s.length > 6 ? s.slice(0, 6) : s;
+  function shortName(x) {
+    if (!x) return '';
+    var s = String(x.name || '');
+    return s.length > 4 ? s.slice(0, 4) : s;   // 卡片只有 136 宽，名字必须截断
   }
 
   function pull() {
@@ -114,26 +142,24 @@
       emaD = smooth(emaD, d.down);
       emaU = smooth(emaU, d.up);
       /* 变化 < 3% 就不重绘（防抖，避免数字每秒无意义地闪） */
-      var changed = lastDrawD === null || lastDrawU === null
-        || Math.abs(emaD - lastDrawD) > Math.max(1, lastDrawD * 0.03)
-        || Math.abs(emaU - lastDrawU) > Math.max(1, lastDrawU * 0.03)
-        || d.stale || d.warm || mode === 'detail';
+      var changed = lastD === null || lastU === null || mode === 'detail'
+        || Math.abs(emaD - lastD) > Math.max(1, lastD * 0.03)
+        || Math.abs(emaU - lastU) > Math.max(1, lastU * 0.03)
+        || d.stale || d.warm;
       if (changed) {
-        lastDrawD = emaD; lastDrawU = emaU;
+        lastD = emaD; lastU = emaU;
         render(d);
       }
     }).catch(function () {
-      elDn.className = 'v dim'; elUp.className = 'v dim';
-      elDn.textContent = '—'; elUp.textContent = '—';
+      setV(vl1, '—', ' dim');
+      setV(vl2, '—', ' dim');
     });
   }
 
-  /* 点一下：总速 ↔ 分网卡明细（排障时看一眼就知道是哪张网卡在跑，
-     VPN/TUN 双计数也能一眼看穿） */
-  bubble.addEventListener('click', function () {
+  /* 点一下：总速 ↔ 分网卡明细（排障时一眼看出是哪张网卡在跑，VPN/TUN 双计数也藏不住） */
+  wrap.addEventListener('click', function () {
     mode = (mode === 'total') ? 'detail' : 'total';
-    document.getElementById('mode').textContent = mode;
-    emaD = null; emaU = null; lastDrawD = null; lastDrawU = null;
+    emaD = null; emaU = null; lastD = null; lastU = null;
     pull();
   });
 
