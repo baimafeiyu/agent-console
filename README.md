@@ -1,95 +1,169 @@
-# 智能体指挥台（agent-console）
+# 智能体指挥台 · agent-console
 
-把本机的 WorkBuddy / OpenCode / DeepSeek Harness 当成员工来管的 Web 工作台。
+一个 Windows 桌面工作台：把本机的 AI 工具（WorkBuddy / OpenCode / DeepSeek Harness / ChatGPT 等）
+当"员工"管理 —— **状态实时监测 → 一键唤起置顶 → 任务派发**，外加 **用量/余额监测** 与 **鲸鱼娘桌面宠物**。
 
-## 启动（2026-09-08 更新：已改为双模式）
+技术栈：**Tauri v2（Rust + WebView2）**，内置纯 Rust HTTP 服务，前端为原生 HTML/CSS/JS（无构建步骤）。
+运行内存约 40 MB，可执行文件约 6 MB，托盘常驻。
 
-- **本地模式（推荐日常用）**：直接双击 `public\index.html`。
-  任务增删改查照常可用，数据存在浏览器 localStorage（换浏览器/清缓存会丢，请勤用「导出 JSON」）。
-  智能体状态探测、窗口置顶、远程启动这些浏览器做不到的能力**停用**，页面会显示「本地模式」。
-  原一键启动器已移除（2026-09-08 用户决定暂时放弃该功能）。
-- **桥接模式（可选）**：`node server.js 8765` 后访问 http://127.0.0.1:8765，
-  恢复全部能力（探测/置顶/启动，任务存 state.json）。
+---
 
-## 为什么需要一个 exe 常驻
+## 功能一览
 
-浏览器里的 HTML **无权操纵操作系统窗口**，这是浏览器的安全底线。
-所以「唤起 + 置顶」必须经由本机桥接：
+### 主工作台（main 窗口，1280×840）
+- **5 个智能体状态探测**：进程名 / 端口 / 窗口标题 / PID 文件四路探测，实时显示在线状态
+- **一键唤起并置顶**：Win32 `EnumWindows + SetForegroundWindow`（含 Alt 键绕前台锁），非 PowerShell 桥接
+- **任务派发**：
+  - OpenCode → 真执行（`opencode run "任务"`，弹独立控制台窗口可见输出）
+  - DeepSeek Harness → 真执行（`dsh --profile headless "任务"`）
+  - WorkBuddy / ChatGPT → 剪贴板派发（任务文本入剪贴板 + 窗口置顶，Ctrl+V 回车下发）
+- 任务 CRUD / 导入导出 / 清空（`state.json`）
+- **OpenCode Go 用量面板**：5 小时 / 本周 / 本月三档进度条，60s 自动刷新
+- 顶栏 ✦ 按钮：显隐鲸鱼娘宠物
+
+### 鲸鱼娘桌面宠物（pet / petmenu / net 三个透明窗）
+- 素材：`whale-refined` 雪碧图（1536×1872 = 8 列 × 9 行，cell 192×208）
+- 动画轨道：idle / running-right / running-left / waving / jumping / failed / waiting / running / review
+- **拖拽**：Rust 自研（`GetCursorPos` + `GetAsyncKeyState` 跟手轮询），不使用 WebView2 原生拖拽
+- **左键互动三通道**：带动作专属台词；闲置自动播闲置动作
+- **右键菜单**：隐藏宠物 / 查余额（Go 用量、DeepSeek 余额）/ 打开工作台 / 唤起各智能体
+- **网速气泡**（net 窗）：`GetIfTable2` 采样实时上下行（独立小窗，可菜单开关，配置 `net-bubble.json` 改完 2 秒生效）
+- **视觉**：动漫化椭圆气泡（实测色板 + 线形规范，见 `气泡视觉规范-动漫化.md`）
+- 动作/行为**清单驱动**（`pet-behavior.json`），换动作改图不需要重编译
+
+### 开发工具（devtools）
+- `pet-engine-test.cjs` 宠物动作引擎离线测试（DOM 桩）
+- `net-fmt-test.cjs` 网速显示口径离线测试
+- `preview.cjs` 无头预览（生成 `preview-*.png`，用于免启动看气泡样式）
+
+---
+
+## 架构
 
 ```
-浏览器 index.html  ──fetch──>  server.js (Node，零依赖)
-                                  │
-                                  ├─ tasklist      探测进程（判断是否在运行）
-                                  ├─ net.Socket    探测端口
-                                  └─ win.ps1       唤起并置顶窗口
+agent-console.exe (Tauri v2)
+├─ Rust HTTP 服务 (tiny_http, 127.0.0.1:8766, 4 worker)
+│   ├─ 静态: /index.html  /pet.html  /menu.html  /net.html  /spritesheet.webp
+│   └─ API:  /api/state  /api/focus  /api/launch  /api/run  /api/bind  /api/task
+│            /api/backup  /api/restore  /api/windows  /api/usage  /api/dshbalance
+│            /api/openurl  /api/pet/toggle  /api/pet/drag  /api/pet/geom
+│            /api/main/show  /api/quit
+├─ 窗口（前端全部经 http://127.0.0.1:8766/*.html 加载，运行时读盘 + no-store）
+│   main    1280×840   普通窗口
+│   pet     204×280    transparent / alwaysOnTop / skipTaskbar / resizable:false / focus:false / decorations:false
+│   petmenu 200×310    同 pet + visible:false（右键才显示）
+│   net     166×56     同 pet + visible:false，**运行时按需创建**（不在 tauri.conf.json）
+├─ 托盘：显示指挥台 / 退出；关窗 = 隐藏到托盘
+└─ AppHandle → OnceLock 桥接给 HTTP 线程（窗口直控端点用）
 ```
 
-## 置顶的三级降级
+> 三个透明窗统一带 `additionalBrowserArgs = "--disable-gpu --disable-features=RendererCodeIntegrity"`。
 
-| 级别 | 手段 | 说明 |
-|---|---|---|
-| 1 | COM `WScript.Shell.AppActivate(pid)` | 轻量，能还原最小化窗口 |
-| 2 | P/Invoke `SetForegroundWindow` | 最强，直接操作窗口句柄 |
-| 3 | 浏览器 `window.open(url).focus()` | 仅 web 类（dsh），不依赖系统权限 |
+---
 
-前两级依赖 PowerShell。若被安全策略拦截，页面顶部会显示
-「窗口探测被拦截 · 按 PID 置顶」，此时改用「绑定」按钮手动指定 PID，置顶依然可用。
+## 目录结构
 
-> 注意：WorkBuddy 自身的沙箱会拦截 AI 调用 PowerShell 的 COM / Add-Type，
-> 所以我在开发环境里**无法验证**第 1、2 级。你双击 bat 启动后点一次「唤起置顶」即可确认。
-
-## 四个智能体（实测配置）
-
-| id | 定位 | 探测方式 | 备注 |
-|---|---|---|---|
-| workbuddy | 指挥台 / 编排者 | 进程 `WorkBuddy.exe` | 唯一编排者，别让它降级成普通 worker |
-| opencode | 开发台（TUI） | 进程 `OpenCode.exe` | 可被脚本调度：`opencode run "任务" --agent X --dir D --format json` |
-| opencode-acp | 调度接口 | 端口 8899 | Agent Client Protocol，跨客户端派活的正规通道 |
-| dsh | 能力扩展台 | 端口 3080 + `~/.dsh/dsh-process.json` | 插件化运行时，能力边界由插件决定 |
-
-**dsh 的真实端口是 3080，不是 8080**（实测 `netstat` 确认）。它的 PID 会写进
-`~/.dsh/dsh-process.json`，服务据此探测，不依赖端口。
-
-## 增删智能体
-
-改 `agents.json`：
-
-```json
-{
-  "id": "myagent",
-  "name": "My Agent",
-  "subtitle": "测试台",
-  "role": "干什么用的",
-  "kind": "app | tui | service | web",
-  "color": "#2563eb",
-  "dir": "C:\\工作目录",
-  "launch": { "cmd": "myagent", "args": [] },
-  "url": "",                                   // web 类填地址
-  "detect": { "process": "", "port": 0, "pidFile": "" },
-  "titleHint": "窗口标题关键词",
-  "strength": "它擅长什么",
-  "caveat": "它的短板"
-}
+```
+agent-console/
+├─ desktop/
+│  ├─ make-icon.js                    图标生成脚本（node 跑一次）
+│  └─ src-tauri/
+│     ├─ Cargo.toml                   tauri2(tray-icon) / tiny_http / ureq / arboard / windows-sys
+│     ├─ tauri.conf.json              窗口声明（main + pet + petmenu；net 不在此）
+│     ├─ capabilities/default.json    ⚠️ 窗口权限白名单（缺它所有 JS 窗口 API 静默失败）
+│     ├─ assets/spritesheet.webp      编译期内嵌兜底素材
+│     ├─ icons/icon.ico
+│     └─ src/
+│        ├─ main.rs                   tauri::Builder / setup / 托盘 / 宠物初始定位
+│        └─ server.rs                 HTTP 服务 + 探测 / 置顶 / 派发 / 余额 / 拖拽
+├─ public/                            前端（运行时从磁盘读）
+│  ├─ index.html                      主工作台
+│  ├─ pet.html  menu.html  net.html   宠物 / 右键菜单 / 网速气泡
+│  └─ pet.json  pet-behavior.json  spritesheet.webp
+├─ devtools/                          离线测试与预览工具
+├─ agents.json                        智能体配置（增删智能体只改这里）
+├─ net-bubble.json                    网速气泡配置（enable / gapLp）
+├─ state.json                         任务数据
+├─ restart.cmd                        优雅重启（quit → 等端口释放 → 拉起）
+├─ server.js / win.ps1                旧的 Node 桥接形态（保留，桌面版不依赖）
+└─ *.md                               交接与设计文档（见下方索引）
 ```
 
-刷新页面即生效，无需重启服务。
+---
 
-## dsh 装插件
+## 构建与运行
 
+### 前置
+- Rust stable-msvc（cargo）+ VS Build Tools（VC++ workload）+ WebView2 Runtime
+- Node 仅用于图标生成与 devtools 脚本
+
+### 构建
+```powershell
+# ⚠️ 编译前必须先退出正在运行的应用（exe 被锁会报 os error 5）
+Get-Process agent-console -ErrorAction SilentlyContinue | Stop-Process -Force
+
+cd desktop\src-tauri
+$env:Path = "$env:USERPROFILE\.cargo\bin;" + $env:Path
+cargo build --release
+Start-Process target\release\agent-console.exe
+```
+
+Git Bash 环境需前置 MSVC（否则 `/usr/bin/link.exe` 抢占链接器，报 `link: extra operand`）：
 ```bash
-dsh plugin --profile web add <包名>
+export PATH="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64:$HOME/.cargo/bin:$PATH"
+export LIB='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\lib\x64;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0\um\x64;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0\ucrt\x64'
 ```
 
-装完重启 `dsh --profile web` 生效。当前已装 13 个插件包，页面「插件舱」区可见。
+### 停止（优先优雅退出）
+```powershell
+curl -X POST http://127.0.0.1:8766/api/quit
+```
 
-## 数据安全
+---
 
-- 任务数据：桥接模式存 `state.json`；本地模式存浏览器 localStorage（导出 JSON 备份）
-- 清空需二次确认
-- 桥接模式只监听 `127.0.0.1`，外部机器访问不到
+## 配置文件速查
 
-## 分工纪律（重要）
+| 文件 | 作用 | 生效方式 |
+|---|---|---|
+| `agents.json` | 智能体清单：探测方式 / 启动命令 / 派发模式 / 文案 | 刷新页面 |
+| `public/pet.json` | 宠物雪碧图清单（帧数/时长/轨道） | 2 秒热重载 |
+| `public/pet-behavior.json` | 动作与行为清单（左键三通道、闲置动作、台词） | 2 秒热重载 |
+| `net-bubble.json` | 网速气泡开关与间距 | 2 秒热重载 |
 
-1. **worker 之间零直接通信**。所有派发经过你或 WorkBuddy，避免循环调用和上下文污染
-2. **输出必须结构化**：任务ID / 状态 / 结论≤3行 / 证据与数据源 / 需要你决策的问题
-3. **知识外置**：交易铁律、席位身份表这类知识做成文件让 agent 按需读取，不要塞进 system prompt
+---
+
+## 文档索引
+
+| 文档 | 内容 |
+|---|---|
+| `交接文档-桌面版指挥台.md` | **总体交接**：架构 / 功能 / 实测事实 / 构建 / 风险 / 路线 |
+| `启动卡死-交接文档.md` | 启动卡死专题：症状判别 / 已排除项 / **根因（WorkBuddy 沙箱）** / 操作红线 |
+| `交接-任务日志与需求清单.md` | 项目全过程日志（需求清单 + 时间线） |
+| `宠物动作制作指南.md` | 加动作/换图三条路、图集硬规格、9 行动作表 |
+| `气泡视觉规范-动漫化.md` | 气泡色板/线形规范、椭圆度取舍、宽度公式 |
+| `网速气泡-设计方案.md` | 网速数据源实测、网卡过滤口径、`GetIfTable2` 实现 |
+
+---
+
+## 已知问题
+
+1. **启动卡死在 WorkBuddy 沙箱内**（进程活、HTTP 正常、`setup()` 不执行）
+   - 根因已定位：**只在 WorkBuddy 命令沙箱内启动时出现**，与代码/WebView2 运行时无关
+   - 规避：**用资源管理器双击启动**，或将 `agent-console.exe` 加入沙箱白名单
+   - 详见 `启动卡死-交接文档.md`
+2. 宠物位置不落盘，重启回默认位（右下角）
+3. `/api/usage`、`/api/dshbalance` 服务端 60s 缓存
+4. 派发的执行窗口用 `cmd /k` 常驻，跑完需手动关闭
+
+## ⛔ 两条红线（踩过的坑，改动前必读）
+
+1. **不要给 `transparent` 窗口加 `resizable:true`，也不要在运行时对它调 `set_size()`** —— 会导致渲染进程崩溃（有崩溃转储佐证）
+2. **不要把 `net` 窗口写进 `tauri.conf.json`** —— 声明进配置会让启动卡在创建它；必须保持运行时按需创建（`ensure_net_window()`），这样即使建窗失败 `setup()` 也能跑完
+
+---
+
+## 隐私说明
+
+- 所有 API key 存放于 `~/.dsh/.credentials.yaml`，应用**运行时读取，绝不写入日志或提交**
+- HTTP 服务仅监听 `127.0.0.1`
+- `.gitignore` 已排除构建产物（`target/` ~3.4GB）与运行日志
