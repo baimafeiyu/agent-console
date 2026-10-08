@@ -520,10 +520,21 @@
   .rc-rail-item.done .rc-rail-no em{display:none}
   .rc-rail-item.done .rc-rail-no::after{content:"✓"}
 
-  /* ---------- 面板：沿用主界面 .panel / .sticker 语言 ---------- */
-  .rc-grid{display:grid;grid-template-columns:minmax(340px,1fr) minmax(400px,1.2fr);gap:16px;align-items:start}
-  @media (max-width:1080px){.rc-grid{grid-template-columns:1fr}}
-  .rc-col{display:grid;gap:16px;min-width:0}
+  /* ---------- 版面：编号步骤单列到底 + 右侧常驻控制台 ----------
+     照抄主界面《今日指挥舱》的节奏（.grid.dashboard 1.55fr/1fr + sticky 侧栏）：
+       ①→⑤ **全部走左列自上而下**。编号序列绝不能跨栏 —— 读完左栏的「第三步」
+       还要跳回右上角找「第四步」，那是硬伤。
+       右列只放**没有编号**的东西（运行日志 / 踩坑速查），所以它不参与顺序，
+       而且 sticky 常驻：点「开始执行」时日志就在眼前，不用滚。 */
+  .rc-layout{display:grid;gap:16px}
+  .rc-flow{display:grid;gap:16px;min-width:0}
+  .rc-rail-col{display:grid;gap:16px;min-width:0;align-content:start}
+  /* 侧栏里的日志压矮一点，保证整条侧栏比视口矮，sticky 才不会把底部顶出屏幕 */
+  .rc-logcard .rc-log{height:280px}
+  @media (min-width:1024px){
+    .rc-layout{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);align-items:start}
+    .rc-rail-col{position:sticky;top:24px}
+  }
   .rc-panel{padding:18px;margin:0;scroll-margin-top:16px}
   .rc-panel-head{display:flex;align-items:center;gap:11px;margin-bottom:14px}
   .rc-panel-head .icon-base{flex:none;color:var(--positive-strong);background:var(--positive-pale)}
@@ -936,9 +947,9 @@
             <li class="rc-rail-item" data-rc-goto="rc-step-5"><span class="rc-rail-no"><em>5</em></span><span>复核交付</span></li>
           </ol>
 
-          <div class="rc-grid">
-            <!-- ============ 左：向导 ============ -->
-            <div class="rc-col">
+          <div class="rc-layout">
+            <!-- ①→⑤ 全在这一列，自上而下 -->
+            <div class="rc-flow">
               <div class="panel rc-panel" id="rc-step-1">
                 <div class="rc-panel-head">
                   <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-folder"/></svg></span>
@@ -1047,10 +1058,6 @@
                   <button class="rc-btn" type="button" onclick="RC.makeJob(true)">生成到自定义文件…</button>
                 </div>
               </div>
-            </div>
-
-            <!-- ============ 右：执行 / 日志 / 复核 ============ -->
-            <div class="rc-col">
               <div class="panel rc-panel" id="rc-step-4">
                 <div class="rc-panel-head">
                   <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-rocket"/></svg></span>
@@ -1083,24 +1090,6 @@
                   副作用提示：S5 及之后会生成一张<b>未保存</b>的单据；只有 S9 才会真正落一张草稿。</div>
               </div>
 
-              <div class="panel rc-panel">
-                <div class="rc-panel-head">
-                  <span class="icon-base rc-icon-info"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-code"/></svg></span>
-                  <div><div class="rc-panel-kicker">实时输出</div><h3>运行日志</h3></div>
-                </div>
-                <div class="rc-console">
-                  <div class="rc-console-bar">
-                    <span class="rc-console-dot" id="rcLogDot"></span>
-                    <span class="rc-console-title" id="logLabel">等待执行</span>
-                    <div class="rc-tools">
-                      <button type="button" onclick="RC.copyLog()">复制</button>
-                      <button type="button" onclick="RC.clearLog()">清空</button>
-                    </div>
-                  </div>
-                  <div class="rc-log" id="log"></div>
-                </div>
-              </div>
-
               <div class="panel rc-panel" id="rc-step-5">
                 <div class="rc-panel-head">
                   <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg></span>
@@ -1121,6 +1110,29 @@
                 </div>
               </div>
 
+            </div>
+
+            <!-- 右栏：常驻控制台。这里的东西**都没有编号**，所以不参与 ①→⑤ 的顺序；
+                 sticky 让它一直在视野里 —— 点「开始执行」时日志就在旁边，不用来回滚。 -->
+            <aside class="rc-rail-col">
+              <div class="panel rc-panel rc-logcard">
+                <div class="rc-panel-head">
+                  <span class="icon-base rc-icon-info"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-code"/></svg></span>
+                  <div><div class="rc-panel-kicker">实时输出</div><h3>运行日志</h3></div>
+                </div>
+                <div class="rc-console">
+                  <div class="rc-console-bar">
+                    <span class="rc-console-dot" id="rcLogDot"></span>
+                    <span class="rc-console-title" id="logLabel">等待执行</span>
+                    <div class="rc-tools">
+                      <button type="button" onclick="RC.copyLog()">复制</button>
+                      <button type="button" onclick="RC.clearLog()">清空</button>
+                    </div>
+                  </div>
+                  <div class="rc-log" id="log"></div>
+                </div>
+              </div>
+
               <div class="panel rc-panel">
                 <div class="rc-panel-head">
                   <span class="icon-base rc-icon-warn"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-warn"/></svg></span>
@@ -1133,7 +1145,7 @@
                 <details><summary>失败后怎么继续 / 为什么"删了还被拒"</summary><div class="rc-muted">退出码 10=重新登录；20=某步断言失败（先人工确认系统里有没有半成品草稿）。<b>重复建单默认不再拦截</b>：本机 <code>run.json</code> 里记过单据号时也只告警照跑（它读的是本机证据，不是 OA，所以你在 OA 删了草稿它不知道）——历史单据号会写进证据留痕；要拦就选「严格模式」。</div></details>
                 <details><summary>不想碰发票池的探测法</summary><div class="rc-muted">把「发票上传方式」设为<b>我手工传发票</b>、附件不含发票 → 生成一版探测工单，跑到 S7（不会保存、也不碰发票池），用它定 rowKey、验填写。</div></details>
               </div>
-            </div>
+            </aside>
           </div>
 
           <div class="panel rc-panel rc-history">
@@ -1898,6 +1910,14 @@
     var lb = $('logLabel'); if (lb) lb.textContent = '等待执行';
     var rs = $('runState'); if (rs) rs.textContent = '';
   };
+  /** 窄屏（<1024px，右侧栏不吸顶、日志被排到页面下方）时，一开跑就把日志滚进视野。
+   *  宽屏别滚：侧栏本来就常驻，滚了反而把你刚点的「开始执行」顶出屏幕。 */
+  function revealLog() {
+    if (window.matchMedia && window.matchMedia('(min-width:1024px)').matches) return;
+    var dot = $('rcLogDot');
+    var card = dot && dot.closest ? dot.closest('.rc-panel') : null;
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   async function api(p, opts) {
     var r = await fetch(p, opts);
@@ -2214,6 +2234,7 @@
     $('logLabel').textContent = '· ' + cmd;
     logDot('live');
     railSet(4);
+    revealLog();
     var es = new EventSource(RC_API + '/run?runId=' + encodeURIComponent(runId));
     CUR_RUN = es;
     $('stepBadges').innerHTML = '';

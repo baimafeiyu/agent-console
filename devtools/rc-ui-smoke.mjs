@@ -61,10 +61,12 @@ try {
   ok(await page.locator('.rc-redline').isVisible(), '红线横幅可见');
 
   console.log('=== 4. 服务状态 + 环境数据（经 /api/reimburse 反代）===');
+  // 冷启动要现拉一个 Node 进程（还要 import playwright/yaml），机器忙时可能超过 30s，
+  // 所以给到 60s；否则会出现「偶发失败」，那比没有测试更糟。
   await page.waitForFunction(() => {
     const c = document.getElementById('rcSvcChip');
     return c && !/未知|正在启动/.test(c.textContent);
-  }, { timeout: 30000 }).catch(() => {});
+  }, { timeout: 60000 }).catch(() => {});
   const svcText = (await page.locator('#rcSvcChip').innerText()).trim();
   ok(/已运行/.test(svcText), '服务状态：' + svcText);
   if (!/已运行/.test(svcText)) console.log('     （页面每次进栏目会自动拉起服务；若一直起不来，先跑 node web/server.mjs 看报错）');
@@ -72,7 +74,7 @@ try {
   await page.waitForFunction(() => {
     const c = document.getElementById('envChips');
     return c && !/加载中/.test(c.textContent);
-  }, { timeout: 30000 }).catch(() => {});
+  }, { timeout: 60000 }).catch(() => {});
   const chips = (await page.locator('#envChips').innerText()).replace(/\s+/g, ' ');
   console.log('  chips: ' + chips);
   ok(/报销说明/.test(chips) && /出差人/.test(chips) && /分摊部门/.test(chips) && /伙食费/.test(chips), '白名单 4 列已渲染');
@@ -115,9 +117,24 @@ try {
   await page.screenshot({ path: SHOT });
   console.log('  截图 → ' + SHOT);
 
-  console.log('=== 9. 界面结构（流程轨 / 面板 / 深色终端）===');
+  console.log('=== 9. 界面结构（步骤顺序 / 流程轨 / 深色终端）===');
   ok(await page.locator('.rc-rail-item').count() === 5, '流程轨 5 步');
   ok(await page.locator('.rc-panel').count() >= 8, '面板数 ' + await page.locator('.rc-panel').count());
+  // ★ 核心：①→⑤ 必须落在同一列里、且按顺序 —— 之前把 ①②③ 放左栏、④⑤ 放右栏，
+  //   读完左栏底的「第三步」要跳回右上角找「第四步」，这是硬伤，必须锁死。
+  const layout = await page.evaluate(() => {
+    const flow = document.querySelector('.rc-flow');
+    const ids = [...flow.querySelectorAll('[id^="rc-step-"]')].map((e) => e.id);
+    const cols = getComputedStyle(document.querySelector('.rc-layout')).gridTemplateColumns.split(' ').length;
+    const rail = getComputedStyle(document.querySelector('.rc-rail-col'));
+    const numberedInRail = [...document.querySelector('.rc-rail-col').querySelectorAll('[id^="rc-step-"]')].length;
+    return { ids, cols, sticky: rail.position, numberedInRail };
+  });
+  ok(layout.ids.join(',') === 'rc-step-1,rc-step-2,rc-step-3,rc-step-4,rc-step-5',
+    '①→⑤ 同列且严格按序：' + layout.ids.join(' → '));
+  ok(layout.numberedInRail === 0, '右侧栏里没有任何「编号步骤」（编号不许跨栏）');
+  ok(layout.cols === 2 && layout.sticky === 'sticky',
+    `宽屏 = 主内容列 + 吸顶侧栏（列 ${layout.cols} / 侧栏 ${layout.sticky}）`);
   await page.locator('.rc-rail-item').nth(1).click();
   await page.waitForTimeout(500);
   ok(await page.locator('.rc-rail-item').nth(1).evaluate((e) => e.classList.contains('active')), '点流程轨能定位到对应步骤');
