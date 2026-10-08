@@ -7,6 +7,9 @@ desktop/src-tauri/gen/
 # 运行时日志
 desktop.log
 
+# 冒烟测试每次运行都会重新生成的截图（跑一次就脏一次工作区，故不入库）
+devtools/preview-rc-section.png
+
 # 编辑器 / 系统
 Thumbs.db
 desktop.ini
