@@ -550,6 +550,24 @@
   .rc-panel-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:16px;
     padding-top:14px;border-top:1px dashed var(--line)}
 
+  /* ---------- 「读补助表预填」：提示条 + 读出来的事实（带出处）---------- */
+  .rc-prefill{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+    margin-top:14px;padding:12px 14px;border:1px dashed var(--line-strong);border-radius:14px;
+    background:color-mix(in srgb,var(--positive-pale) 55%,transparent)}
+  .rc-prefill-copy{flex:1 1 260px;min-width:0}
+  .rc-prefill-copy b{font-size:13px}
+  .rc-prefill-copy .rc-hint{margin-top:3px}
+  .rc-readout{margin-top:10px;padding:13px 15px;border:1px solid var(--positive);border-radius:14px;
+    background:var(--positive-pale)}
+  .rc-readout>b{font-size:13px;color:var(--positive-strong)}
+  .rc-readout-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px;margin-top:9px;
+    padding-top:9px;border-top:1px dashed color-mix(in srgb,var(--positive) 32%,transparent)}
+  .rc-readout-label{color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap}
+  .rc-readout-value{color:var(--ink-deep);font-weight:750;font-variant-numeric:tabular-nums;
+    overflow-wrap:anywhere}
+  .rc-readout-src{grid-column:2;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+  .rc-readout .rc-hint{margin-top:9px}
+
   .rc-btn.primary{background:var(--positive-strong);border-color:var(--positive-strong);color:#fffaf3;
     box-shadow:0 4px 12px color-mix(in srgb,var(--positive) 26%,transparent)}
   .rc-btn.ok{background:var(--positive-strong);border-color:var(--positive-strong);color:#fffaf3}
@@ -596,6 +614,10 @@
   /* ---------- 目录 / 附件归类 ---------- */
   .rc-dirlist{max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:14px;
     padding:7px;background:var(--surface-raised)}
+  /* 还没选目录时别留两个空框 */
+  .rc-dirlist:empty::before{display:block;padding:5px 7px;color:var(--rc-dim);font-size:12px}
+  #dirs:empty::before{content:"（填个路径后点「打开」，这里列出子目录）"}
+  #files:empty::before{content:"（打开目录后，这里按 refs/fields.yaml 的规则列出附件与归类建议）"}
   .rc-navrow{padding:2px 3px}
   .rc-root .rc-dirlist button{width:100%;padding:6px 10px;font-size:12.5px;text-align:left;
     border-color:transparent;background:transparent;box-shadow:none}
@@ -619,7 +641,10 @@
   /* ---------- 表格 / 键值 / 折叠 ---------- */
   .rc-history{margin-top:16px}
   .rc-tablewrap{overflow-x:auto}
-  .rc-root table{width:100%;border-collapse:collapse;font-size:12.5px}
+  /* 8 列塞进 956px 会把「操作」列压成竖排 —— 给个下限，宁可横向滚也别把字挤碎 */
+  .rc-root table{width:100%;min-width:840px;border-collapse:collapse;font-size:12.5px}
+  .rc-ops{white-space:nowrap;text-align:right}
+  .rc-ops .rc-btn,.rc-ops a.rc-btn{margin-left:5px}
   .rc-root th{padding:9px 10px;border-bottom:1px solid var(--line-strong);color:var(--muted);
     font-size:11.5px;font-weight:750;letter-spacing:.03em;text-align:left;white-space:nowrap}
   .rc-root td{padding:11px 10px;border-bottom:1px dashed var(--line);text-align:left;vertical-align:middle}
@@ -978,6 +1003,17 @@
                   <div><div class="rc-panel-kicker">第二步</div><h3>填人工判断项</h3></div>
                 </div>
                 <p class="rc-hint" style="margin:0">机器抽事实，人写句子与判断。这里填错会直接进 OA 单据，所以逐项过一遍。</p>
+
+                <!-- 读补助表预填：只读接口，只填「事实」三类，不碰措辞/部门/收款 -->
+                <div class="rc-prefill">
+                  <div class="rc-prefill-copy">
+                    <b>先让机器把事实填了</b>
+                    <div class="rc-hint">目录里若有「伙食补贴申请表」xlsx，<b>出差人 / 事由 / 伙食费</b>能直接读出来 —— 这三项是事实，不用手打。读不出会明确告诉你为什么。</div>
+                  </div>
+                  <button class="rc-btn" type="button" onclick="RC.prefillMeal()">读补助表预填</button>
+                </div>
+                <div id="prefillOut"></div>
+
                 <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg>批次与人员</div>
                 <div class="rc-two">
                   <div><label>批次标识 jobId</label><input id="f_jobId" /></div>
@@ -2053,21 +2089,23 @@
     $('history').innerHTML = ((ENV && ENV.batches) || []).map(function (b) {
       var a = b.audit;
       var audit = a
-        ? '<span class="rc-chip ' + (a.submitClicked ? 'bad' : 'ok') + '">' + a.totalClicks + '点击/' + a.forbiddenClicks + '禁止/' + (a.submitClicked ? '点过提交!' : '未点提交') + '</span>'
+        ? '<span class="rc-chip ' + (a.submitClicked ? 'bad' : 'ok') + '">' + a.totalClicks + ' 点击'
+          + (a.forbiddenClicks ? ' · 拦 ' + a.forbiddenClicks : '')
+          + ' · ' + (a.submitClicked ? '点过提交!' : '未点提交') + '</span>'
         : '<span class="rc-muted">—</span>';
       return '<tr>' +
         '<td>' + esc(b.jobId) + '</td>' +
-        '<td>' + (b.billNo ? '<b>' + esc(b.billNo) + '</b>' : '<span class="rc-muted">—</span>') + '</td>' +
-        '<td>' + (b.totalAmount ? '￥' + esc(b.totalAmount) : '<span class="rc-muted">—</span>') + '</td>' +
+        '<td class="rc-billno">' + (b.billNo ? esc(b.billNo) : '<span class="rc-muted">—</span>') + '</td>' +
+        '<td class="rc-amount">' + (b.totalAmount ? '￥' + esc(b.totalAmount) : '<span class="rc-muted">—</span>') + '</td>' +
         '<td>' + statusChip(b.status, b.currentStep) + '</td>' +
-        '<td class="rc-muted">' + (b.steps || []).join(' ') + '</td>' +
+        '<td class="rc-muted" style="white-space:nowrap">' + (b.steps || []).join(' ') + '</td>' +
         '<td>' + audit + '</td>' +
-        '<td class="rc-muted">' + (b.finishedAt ? esc(b.finishedAt.slice(0, 19).replace('T', ' ')) : '—') + '</td>' +
-        '<td><button class="rc-btn sm" type="button" onclick="RC.pickBatch(\'' + esc(b.jobId) + '\')">查看</button> ' +
+        '<td class="rc-muted" style="white-space:nowrap">' + (b.finishedAt ? esc(b.finishedAt.slice(0, 19).replace('T', ' ')) : '—') + '</td>' +
+        '<td class="rc-ops"><button class="rc-btn sm" type="button" onclick="RC.pickBatch(\'' + esc(b.jobId) + '\')">查看</button>' +
         (b.hasCard ? '<a class="rc-btn sm" href="' + RC_API + '/evidence?jobId=' + encodeURIComponent(b.jobId) + '&file=' + encodeURIComponent('待复核.xlsx') + '">复核卡</a>' : '') +
         ' <button class="rc-btn sm" type="button" onclick="RC.makeCard(\'' + esc(b.jobId) + '\')">生成卡</button></td>' +
         '</tr>';
-    }).join('') || '<tr><td colspan="8" class="rc-muted">还没有批次</td></tr>';
+    }).join('') || '<tr><td colspan="8"><div class="rc-empty">还没有批次 —— 走完 ①→④ 跑一张单子，这里就会出现</div></td></tr>';
   }
   function statusChip(st, step) {
     if (st === 'saved-draft') return '<span class="rc-chip ok">已保存草稿</span>';
@@ -2134,6 +2172,52 @@
   RC.mealMode = function () {
     var m = document.querySelector('input[name=meal]:checked').value;
     $('mealImage').style.display = m === 'image' ? 'grid' : 'none';
+  };
+
+  /* ── 读补助表预填：只填「事实」，不碰「判断」──────────────────────
+     接口 /api/prefill 是**只读**的（技能 web/server.mjs），且解析实现与
+     make-job.mjs 共用 runner/lib/meal.mjs —— 所以这里显示的金额与真正写进
+     工单的金额必然一致，不存在「预填一个数、工单另一个数」。
+     ★ 只写三类事实：出差人员 / 事由 / 伙食档位。
+       措辞、分摊部门、收款方、rowKey **一律不碰**（决策记录 #4：不猜部门不猜职级；K2：金额账号人工复核）。 */
+  RC.prefillMeal = async function () {
+    var out = $('prefillOut');
+    if (!out) return;
+    if (!CHOSEN) { toast('先在①里选票据目录（点「用这个目录」）', 'bad'); return; }
+    out.innerHTML = '<div class="rc-hint" style="margin-top:10px">正在读补助表…</div>';
+
+    var r;
+    try { r = await api(RC_API + '/prefill?path=' + encodeURIComponent(CHOSEN)); }
+    catch (e) {
+      out.innerHTML = '<div class="rc-banner warn" style="margin-top:10px">预填失败：' + esc(e.message) + '</div>';
+      return;
+    }
+
+    if (!r.ok) {
+      // 读不出就照实说原因，绝不猜（没表 / 是图片 / 多张 / 读失败 / 结构不符）
+      out.innerHTML = '<div class="rc-banner warn" style="margin-top:10px">' + esc(r.message || r.reason) + '</div>';
+      toast('没读出来：' + (r.reason || ''), 'bad');
+      return;
+    }
+
+    if (r.suggest['出差人员'] && r.suggest['出差人员'].length) $('f_persons').value = r.suggest['出差人员'].join('，');
+    if (r.suggest['事由']) $('f_reason').value = r.suggest['事由'];
+    var radio = document.querySelector('input[name=meal][value="xlsx"]');
+    if (radio) { radio.checked = true; RC.mealMode(); }
+    var mp = $('memoPreview'); if (mp) mp.textContent = memoText() || '—';
+
+    out.innerHTML = '<div class="rc-readout">'
+      + '<b>从补助表读出来的事实</b><span class="rc-muted">　已填进下面的表单，都可以改</span>'
+      + (r.readout || []).map(function (x) {
+        return '<div class="rc-readout-row">'
+          + '<span class="rc-readout-label">' + esc(x.label) + '</span>'
+          + '<span class="rc-readout-value">' + esc(x.value) + '</span>'
+          + '<span class="rc-readout-src">出处：' + esc(x.source) + '</span>'
+          + '</div>';
+      }).join('')
+      + (r.notes || []).map(function (n) { return '<div class="rc-hint">' + esc(n) + '</div>'; }).join('')
+      + '</div>';
+    toast('已按补助表预填：出差人 / 事由 / 伙食档位', 'ok');
   };
   function memoText() {
     var tpl = $('f_tpl').value || '[{部门简称}]{出差人}{备注}差旅费';

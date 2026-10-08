@@ -189,7 +189,53 @@ try {
   const pageOvf = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(pageOvf <= 2, `≥430px 整页无横向溢出（${pageOvf}px）`);
 
-  console.log('=== 12. 控制台 / 网络 ===');
+  console.log('=== 12. 读补助表预填（只读接口，只填事实）===');
+  const mealDir = 'C:\\Users\\61401\\Desktop\\3.工作\\何邦阳9.22出差';
+  if (!fs.existsSync(mealDir)) {
+    console.log('  ⏭  跳过：本机没有已知的补助表目录 ' + mealDir);
+  } else {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-target="reimburse"]').first().click();
+    await page.waitForTimeout(1500);
+    // ① 选一个真有补助表的目录
+    await page.fill('#browsePath', mealDir);
+    await page.locator('button:has-text("打开")').first().click();
+    await page.waitForTimeout(1500);
+    await page.locator('button:has-text("用这个目录")').click();
+    // 先清空，确保值确实是「预填」写进来的、不是残留
+    await page.fill('#f_persons', '');
+    await page.fill('#f_reason', '');
+    await page.locator('button:has-text("读补助表预填")').click();
+    await page.waitForFunction(() => {
+      const o = document.getElementById('prefillOut');
+      return o && /rc-readout|rc-banner/.test(o.innerHTML);
+    }, { timeout: 30000 }).catch(() => {});
+    const pf = await page.evaluate(() => {
+      const o = document.getElementById('prefillOut');
+      return {
+        persons: document.getElementById('f_persons').value,
+        reason: document.getElementById('f_reason').value,
+        meal: (document.querySelector('input[name=meal]:checked') || {}).value,
+        text: o.innerText.replace(/\s+/g, ' ').slice(0, 180),
+        hasSource: /出处/.test(o.innerText),
+        // 红线：这几项一个都不该被预填
+        alloc: document.getElementById('f_allocDept').value,
+        payee: document.getElementById('f_payee').value,
+        bank: document.getElementById('f_bank').value,
+        tail: document.getElementById('f_tail').value,
+      };
+    });
+    console.log('  ' + pf.text);
+    ok(pf.persons.length > 0, '出差人已预填：' + pf.persons);
+    ok(pf.reason.length > 0, '事由已预填：' + pf.reason);
+    ok(pf.meal === 'xlsx', '伙食档位自动切到「目录里有补助表 xlsx」');
+    ok(pf.hasSource, '读出来的值都带「出处」');
+    ok(!pf.alloc && !pf.payee && !pf.bank && !pf.tail,
+      '★ 红线守住：分摊部门/收款人/开户行/尾号 一个都没被预填');
+  }
+
+  console.log('=== 13. 控制台 / 网络 ===');
   ok(errs.length === 0, errs.length ? '控制台错误：' + errs.slice(0, 5).join(' | ') : '无 JS 错误');
   ok(failedReq.length === 0, failedReq.length ? '失败请求：' + failedReq.slice(0, 5).join(' | ') : '无失败请求');
 } finally {
