@@ -1,8 +1,9 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
 <title>智能体指挥台</title>
 <style>
   :root {
@@ -417,6 +418,118 @@
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{scroll-behavior:auto !important;animation-duration:.01ms !important;transition-duration:.01ms !important}
   }
+
+  /* ════════════ 差旅费报销操作台 ════════════
+     移植自 oa-reimburse-draft/web/index.html：结构与交互原样保留，
+     只把配色映射到本应用的 token（浅色/深色跟随 data-theme），
+     并把主界面那套「大按钮/48px 输入框」的全局规则在 .rc-root 内复位成紧凑形态。 */
+  .rc-root{
+    --rc-panel:var(--surface);
+    --rc-panel2:var(--surface-soft);
+    --rc-line:var(--line);
+    --rc-txt:var(--ink-deep);
+    --rc-dim:var(--muted);
+    --rc-acc:var(--blue);
+    --rc-ok:var(--positive);
+    --rc-warn:var(--warning);
+    --rc-bad:var(--danger);
+    --rc-chip:var(--surface-soft);
+    --rc-mono:ui-monospace,Consolas,"Cascadia Mono",monospace;
+  }
+  .rc-root button{min-height:0;height:auto;padding:6px 12px;font-size:13px;line-height:1.4;
+    border:1px solid var(--rc-line);border-radius:10px;background:var(--rc-panel);color:var(--rc-txt);
+    transform:none;transition:border-color 140ms ease,background 140ms ease}
+  .rc-root button:hover{border-color:var(--rc-acc);background:var(--rc-panel2);transform:none}
+  .rc-root button:active{transform:none}
+  .rc-root input,.rc-root select{width:100%;height:auto;min-height:0;padding:6px 9px;font-size:13px;
+    border:1px solid var(--rc-line);border-radius:10px;background:var(--rc-panel);color:var(--rc-txt)}
+  .rc-root textarea{width:100%;min-height:60px;padding:6px 9px;font-size:13px;border:1px solid var(--rc-line);
+    border-radius:10px;background:var(--rc-panel);color:var(--rc-txt);resize:vertical}
+  .rc-root input[type=checkbox],.rc-root input[type=radio]{width:auto;height:auto;min-height:0;padding:0}
+  .rc-root label{display:block;font-size:12px;color:var(--rc-dim);margin:8px 0 3px}
+  .rc-root label.rc-inline{display:flex;align-items:center;gap:6px;margin:0}
+  .rc-root a{color:var(--rc-acc)}
+  .rc-root h2{font-size:15px;margin:0 0 10px;color:var(--rc-txt)}
+  .rc-root code{font:12px var(--rc-mono);background:var(--rc-chip);border:1px solid var(--rc-line);
+    border-radius:5px;padding:0 4px}
+  .rc-muted{color:var(--rc-dim)}
+  .rc-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .rc-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .rc-three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .rc-sep{height:1px;background:var(--rc-line);margin:12px 0}
+  .rc-hint{font-size:11.5px;color:var(--rc-dim);margin-top:3px}
+
+  .rc-head{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+  .rc-head h2{font-size:1.35rem;margin:0}
+  .rc-head p{margin:2px 0 0;color:var(--rc-dim);font-size:13px}
+  .rc-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .rc-chip{background:var(--rc-chip);border:1px solid var(--rc-line);border-radius:999px;
+    padding:2px 10px;font-size:12px;color:var(--rc-dim)}
+  .rc-chip b{color:var(--rc-txt);font-weight:600}
+  .rc-chip.ok{border-color:var(--rc-ok);color:var(--rc-ok)}
+  .rc-chip.warn{border-color:var(--rc-warn);color:var(--rc-warn)}
+  .rc-chip.bad{border-color:var(--rc-bad);color:var(--rc-bad)}
+  .rc-redline{background:var(--rc-bad);border:1px solid var(--rc-bad);border-radius:12px;padding:8px 12px;
+    font-size:12.5px;color:#fff;margin-bottom:12px;opacity:.92}
+  .rc-redline b{color:#fff}
+  .rc-banner{border-radius:12px;padding:10px 12px;margin:10px 0;font-size:13px;
+    border:1px solid var(--rc-line);background:var(--rc-panel2);color:var(--rc-txt)}
+  .rc-banner.ok{border-color:var(--rc-ok);color:var(--rc-ok)}
+  .rc-banner.warn{border-color:var(--rc-warn);color:var(--rc-warn)}
+  .rc-banner.bad{border-color:var(--rc-bad);color:var(--rc-bad)}
+
+  .rc-grid{display:grid;grid-template-columns:minmax(360px,1fr) minmax(400px,1.25fr);gap:14px;align-items:start}
+  @media (max-width:1080px){.rc-grid{grid-template-columns:1fr}}
+  .rc-card{background:var(--rc-panel);border:1px solid var(--rc-line);border-radius:var(--radius);
+    padding:16px;margin-bottom:14px;box-shadow:var(--shadow-soft)}
+  .rc-card.flat{background:var(--rc-panel2)}
+  .rc-btn.primary{background:var(--positive-strong);border-color:var(--positive-strong);color:#fffaf3}
+  .rc-btn.ok{background:var(--rc-ok);border-color:var(--rc-ok);color:#fff}
+  .rc-btn.warn{background:var(--rc-warn);border-color:var(--rc-warn);color:#fff}
+  .rc-btn.bad{background:var(--rc-bad);border-color:var(--rc-bad);color:#fff}
+  .rc-btn:disabled{opacity:.45;cursor:not-allowed}
+  .rc-btn.sm{padding:3px 9px;font-size:12px}
+
+  .rc-steps{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .rc-step{font:12px var(--rc-mono);background:var(--rc-chip);border:1px solid var(--rc-line);
+    border-radius:6px;padding:1px 7px;color:var(--rc-dim)}
+  .rc-step.run{border-color:var(--rc-acc);color:var(--rc-acc)}
+  .rc-step.ok{border-color:var(--rc-ok);color:var(--rc-ok)}
+  .rc-step.bad{border-color:var(--rc-bad);color:var(--rc-bad)}
+
+  .rc-log{background:var(--surface-raised);border:1px solid var(--rc-line);border-radius:12px;padding:10px;
+    height:320px;overflow:auto;font:12px/1.5 var(--rc-mono);white-space:pre-wrap;word-break:break-word;color:var(--rc-txt)}
+  .rc-log .l-ok{color:var(--rc-ok)}.rc-log .l-bad{color:var(--rc-bad)}
+  .rc-log .l-warn{color:var(--rc-warn)}.rc-log .l-step{color:var(--rc-acc);font-weight:600}
+
+  .rc-root table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rc-root th,.rc-root td{border-bottom:1px solid var(--rc-line);padding:5px 6px;text-align:left;vertical-align:top}
+  .rc-root th{color:var(--rc-dim);font-weight:500}
+  .rc-dirlist{max-height:240px;overflow:auto;border:1px solid var(--rc-line);border-radius:10px;
+    padding:6px;background:var(--rc-panel)}
+  /* 附件行：栅格两行 —— 第一行「标签 + 文件名 + 大小」，第二行整宽的下拉。
+     主界面这一栏比操作台独立页窄，flex 排会把文件名挤成三行，所以改成栅格。 */
+  .rc-file{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 8px;
+    align-items:center;padding:4px;border-radius:8px}
+  .rc-file>:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rc-file>:nth-child(3){font-size:11px;color:var(--rc-dim);text-align:right;white-space:nowrap}
+  .rc-file>select{grid-column:1/-1;width:100%}
+  .rc-file:hover{background:var(--rc-panel2)}
+  .rc-navrow{padding:2px 4px}
+  .rc-tag{font-size:11px;border-radius:999px;padding:0 8px;border:1px solid var(--rc-line);color:var(--rc-dim);white-space:nowrap}
+  .rc-tag.f-invoice{border-color:var(--rc-warn);color:var(--rc-warn)}
+  .rc-tag.f-other{border-color:var(--rc-acc);color:var(--rc-acc)}
+  .rc-tag.f-bad{border-color:var(--rc-bad);color:var(--rc-bad)}
+  .rc-root details{border:1px solid var(--rc-line);border-radius:12px;padding:8px 12px;
+    background:var(--rc-panel2);margin-bottom:8px}
+  .rc-root summary{cursor:pointer;font-weight:600;font-size:13px}
+  .rc-kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:13px}
+  .rc-kv div:nth-child(odd){color:var(--rc-dim)}
+  .rc-toast{position:fixed;right:16px;bottom:16px;background:var(--rc-panel);border:1px solid var(--rc-line);
+    border-left:3px solid var(--rc-acc);border-radius:12px;padding:10px 14px;max-width:420px;z-index:60;
+    box-shadow:var(--shadow);font-size:13px;color:var(--rc-txt)}
+  .rc-toast.bad{border-left-color:var(--rc-bad)}
+  .rc-toast.ok{border-left-color:var(--rc-ok)}
 </style>
 </head>
 <body>
@@ -448,6 +561,7 @@
   <symbol id="i-task" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8.5 12.5 2.4 2.4L15.8 9.5"/></symbol>
   <symbol id="i-empty" viewBox="0 0 24 24"><path d="M4.5 7.5 6.8 4h10.4l2.3 3.5M4.5 7.5h15V20h-15zM9.5 12h5"/></symbol>
   <symbol id="i-plugin" viewBox="0 0 24 24"><path d="M9 3v4m6-4v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></symbol>
+  <symbol id="i-reimburse" viewBox="0 0 24 24"><path d="M5 3.5h9l5 5v12H5z"/><path d="M14 3.5v5h5"/><path d="M8.5 13h7M8.5 16.5h4.5"/></symbol>
 </svg>
 
 <div class="app-shell">
@@ -463,6 +577,7 @@
       <button class="nav-button" type="button" data-target="agents"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg><span>智能体模块</span></button>
       <button class="nav-button" type="button" data-target="tasks"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>任务派发</span></button>
       <button class="nav-button" type="button" data-target="plugins"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-plug"/></svg><span>插件舱</span></button>
+      <button class="nav-button" type="button" data-target="reimburse"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-reimburse"/></svg><span>报销操作台</span></button>
     </nav>
     <div class="sidebar-footer">
       <button type="button" data-act="export"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-download"/></svg><span>导出 JSON</span></button>
@@ -675,6 +790,208 @@
         </div>
       </section>
 
+      <!-- ============ 报销操作台（移植自 oa-reimburse-draft/web/index.html）============ -->
+      <section class="page-section" data-section="reimburse" aria-labelledby="rc-title">
+        <div class="rc-root" id="rcRoot">
+
+          <div class="rc-head">
+            <div>
+              <h2 id="rc-title">差旅费报销操作台</h2>
+              <p>OA 财务系统 · 只填不提交 · 从「选票据」做到「保存草稿 + 复核卡」</p>
+            </div>
+            <div class="rc-chips" id="envChips"><span class="rc-chip">加载中…</span></div>
+          </div>
+
+          <div class="rc-row" style="margin-bottom:10px">
+            <span class="rc-chip" id="rcSvcChip">服务状态未知</span>
+            <button class="rc-btn sm" type="button" onclick="RC.svcToggle()" id="rcSvcBtn">启动服务</button>
+            <button class="rc-btn sm" type="button" onclick="RC.exec('setup')">环境自检</button>
+            <button class="rc-btn sm" type="button" onclick="RC.exec('login')">登录 OA</button>
+            <button class="rc-btn sm" type="button" onclick="RC.exec('login-list')">登录态体检</button>
+            <button class="rc-btn sm" type="button" onclick="RC.exec('preflight')">只读探测</button>
+            <button class="rc-btn sm" type="button" onclick="RC.exec('selftest',{fast:true})">离线自检</button>
+          </div>
+
+          <div class="rc-redline" id="redline">红线：<b>只填不提交</b> · 写入白名单只有 4 列 · <b>金额一律不碰</b>（系统从发票自动录入） · 保存草稿后由<b>你本人</b>去 OA 点提交</div>
+
+          <div class="rc-grid">
+            <!-- ============ 左：向导 ============ -->
+            <div>
+              <div class="rc-card">
+                <h2>① 选票据目录</h2>
+                <div class="rc-row">
+                  <input id="browsePath" placeholder="C:\Users\...\Desktop\3.工作\20261008" style="flex:1" />
+                  <button class="rc-btn sm" type="button" onclick="RC.browse()">打开</button>
+                  <button class="rc-btn sm" type="button" onclick="RC.browseUp()">上一级</button>
+                </div>
+                <div class="rc-hint">浏览器拿不到本机绝对路径，所以这里由本地服务列目录；也可以直接把路径粘进来。</div>
+                <label>子目录</label>
+                <div class="rc-dirlist" id="dirs"></div>
+                <label>附件与归类预览 <span class="rc-muted">（规则来自 refs/fields.yaml；可逐条改成别的文件夹 —— 例如行程单被规则判进「发票」时要改成「其他相关资料」）</span></label>
+                <div class="rc-dirlist" id="files"></div>
+                <div class="rc-hint">红色的 = 规则完全对不上，必须手工指定；已归类的也可以改。</div>
+                <div class="rc-row" style="margin-top:8px">
+                  <button class="rc-btn primary" type="button" onclick="RC.useBatchDir()">用这个目录</button>
+                  <span id="chosenDir" class="rc-muted"></span>
+                </div>
+              </div>
+
+              <div class="rc-card">
+                <h2>② 填人工判断项 <span class="rc-muted" style="font-size:12px">（机器抽事实，人写句子与判断）</span></h2>
+                <div class="rc-two">
+                  <div><label>批次标识 jobId</label><input id="f_jobId" /></div>
+                  <div><label>部门简称</label><input id="f_dept" placeholder="临海" /></div>
+                </div>
+                <div class="rc-three">
+                  <div><label>出差类型</label><select id="f_travelType"></select></div>
+                  <div><label>领导出差</label><select id="f_leader"></select></div>
+                  <div><label>出差人员（逗号分隔）</label><input id="f_persons" placeholder="包周艳" /></div>
+                </div>
+                <div class="rc-two">
+                  <div><label>事由</label><input id="f_reason" placeholder="赴杭州参加培训" /></div>
+                  <div><label>报销说明模板</label><input id="f_tpl" value="[{部门简称}]{出差人}{备注}差旅费" /></div>
+                </div>
+                <div class="rc-hint">预览：<b id="memoPreview" class="rc-muted">—</b>　（{备注}/{事由} 取上面的「事由」）</div>
+
+                <label>伙食补助</label>
+                <div class="rc-row">
+                  <label class="rc-inline"><input type="radio" name="meal" value="xlsx" checked onchange="RC.mealMode()"> 目录里有补助表 xlsx（自动读）</label>
+                  <label class="rc-inline"><input type="radio" name="meal" value="image" onchange="RC.mealMode()"> 补助表是图片（我填金额）</label>
+                  <label class="rc-inline"><input type="radio" name="meal" value="none" onchange="RC.mealMode()"> <b>无伙食补助</b>（培训类常见）</label>
+                </div>
+                <div class="rc-two" id="mealImage" style="display:none">
+                  <div><label>伙食费金额</label><input id="f_meal" type="number" placeholder="160" /></div>
+                  <div><label>金额依据（可追溯）</label><input id="f_mealSrc" placeholder="伙食.jpg 视觉识别 合计160" /></div>
+                </div>
+
+                <div class="rc-three">
+                  <div><label>收款人</label><input id="f_payee" placeholder="包周艳" /></div>
+                  <div><label>开户行</label><input id="f_bank" placeholder="中国工商银行…" /></div>
+                  <div><label>账号后四位（可空）</label><input id="f_tail" maxlength="4" placeholder="7793" /></div>
+                </div>
+
+                <label>分摊部门 <span class="rc-muted">（规则：出差人所在部门；多人取职级最高者；同级取收款人部门）</span></label>
+                <input id="f_allocDept" list="deptHints" placeholder="103310030300 临海_专卖监督管理科（…）" />
+                <datalist id="deptHints"></datalist>
+                <input id="f_allocBasis" placeholder="依据，例如：出差人包周艳所在部门（单人出差）" style="margin-top:6px" />
+                <div class="rc-hint">⚠️ 系统默认按 <b>经办人</b> 部门带出（实测与出差人无关）。留空则不填，复核卡会提示人工确认。填了会联动改「资金使用部门」。</div>
+
+                <div class="rc-two">
+                  <div><label>发票上传方式</label>
+                    <select id="f_invoice">
+                      <option value="script">脚本逐张上传（推荐；受发票池状态影响）</option>
+                      <option value="manual">我手工传发票（脚本不碰发票）</option>
+                    </select>
+                  </div>
+                  <div><label>明细定位 rowKey / rowKeys（逗号分隔）</label><input id="f_rowKeys" placeholder="vstartplace=台州市, vstartplace=杭州市" /></div>
+                </div>
+                <div class="rc-row">
+                  <label class="rc-inline"><input type="checkbox" id="f_onlyMemo"> 只填「报销说明」（rowKey 用数据字段、行内出差人已由表头下发时选它）</label>
+                </div>
+                <div class="rc-hint">不知道 rowKey？先跑一版 <b>不带发票的探测工单</b>（发票上传方式=我手工传 + 这里随便填 + 执行到 S7），脚本会把每个数据行的字段 dump 出来。</div>
+
+                <div id="overrideBox" style="display:none">
+                  <label>无法归类的文件 → 指定文件夹</label>
+                  <div id="overrides"></div>
+                </div>
+
+                <div class="rc-sep"></div>
+                <div class="rc-row">
+                  <button class="rc-btn" type="button" onclick="RC.saveConfig()">保存配置</button>
+                  <button class="rc-btn primary" type="button" onclick="RC.dryRun()">生成摘要（dry-run）</button>
+                  <span id="cfgPath" class="rc-muted"></span>
+                </div>
+              </div>
+
+              <div class="rc-card">
+                <h2>③ 核对摘要 → 生成工单</h2>
+                <div class="rc-banner warn">机器只给建议：<b>报销说明的措辞、金额、人数、rowKey</b> 都要你确认。</div>
+                <label class="rc-inline"><input type="checkbox" id="confirmDry"> 我已核对上面的摘要（报销说明 / 人数 / 附件 / 金额来源）</label>
+                <div class="rc-row" style="margin-top:8px">
+                  <button class="rc-btn ok" type="button" id="btnMakeJob" onclick="RC.makeJob()" disabled>生成工单</button>
+                  <button class="rc-btn sm" type="button" onclick="RC.makeJob(true)">生成到自定义文件…</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============ 右：执行 / 日志 / 复核 ============ -->
+            <div>
+              <div class="rc-card">
+                <h2>④ 执行</h2>
+                <div class="rc-three">
+                  <div><label>工单</label><select id="f_job"></select></div>
+                  <div><label>跑到哪里</label>
+                    <select id="f_stopAt">
+                      <option value="">全程 → 保存草稿（S9）</option>
+                      <option value="S5">只到 S5（看明细行，不保存）</option>
+                      <option value="S7">只到 S7（验填写，不保存）</option>
+                    </select>
+                  </div>
+                  <div><label>重复建单</label>
+                    <select id="f_gate">
+                      <option value="allow">照常重跑（默认 · 不拒绝，只告警+留痕）</option>
+                      <option value="strict">严格模式：已有单据号就拒绝</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="rc-row" style="margin-top:8px">
+                  <button class="rc-btn primary" type="button" onclick="RC.runJob()">开始执行</button>
+                  <button class="rc-btn sm" type="button" onclick="RC.loadJobs(true)">刷新工单列表</button>
+                  <span class="rc-muted" id="runState"></span>
+                </div>
+                <div class="rc-steps" id="stepBadges"></div>
+                <div class="rc-hint">★ 重复建单：本机 <code>run.json</code> 记录过这张工单的单据号时，<b>默认照样重跑</b>（只告警并把历史单据号写进证据）——
+                  因为闸门看的是本机证据、看不到你在 OA 里删没删。要拦截请选「严格模式」。<br>
+                  副作用提示：S5 及之后会生成一张<b>未保存</b>的单据；只有 S9 才会真正落一张草稿。</div>
+              </div>
+
+              <div class="rc-card">
+                <h2>实时日志 <span class="rc-muted" style="font-size:12px" id="logLabel"></span></h2>
+                <div class="rc-log" id="log">（点上面的按钮开始）</div>
+                <div class="rc-row" style="margin-top:6px">
+                  <button class="rc-btn sm" type="button" onclick="RC.copyLog()">复制日志</button>
+                  <button class="rc-btn sm" type="button" onclick="document.getElementById('log').textContent=''">清空</button>
+                </div>
+              </div>
+
+              <div class="rc-card">
+                <h2>⑤ 复核与交付</h2>
+                <div class="rc-row">
+                  <select id="f_batch" style="flex:1" onchange="RC.renderBatch()"></select>
+                  <button class="rc-btn sm" type="button" onclick="RC.loadEnv()">刷新</button>
+                  <button class="rc-btn sm" type="button" onclick="RC.makeCard()">生成复核卡</button>
+                </div>
+                <div id="batchDetail"></div>
+                <div class="rc-banner warn" id="submitReminder" style="display:none">
+                  <b>下一步由你本人完成：</b>打开 OA → 「报账员工作台 → 我的单据」找到这张草稿 → 核对 → 点「提交」。<b>本工具永不点提交。</b>
+                  <div class="rc-row" style="margin-top:6px">
+                    <button class="rc-btn sm" type="button" onclick="RC.openUrl('http://www.zj.yc/group/tz')">打开 OA 门户</button>
+                    <button class="rc-btn sm" type="button" onclick="RC.openUrl('http://hycw.sj.zj.yc/#/')">打开财务系统</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rc-card">
+                <h2>备注 / 踩坑速查 <span class="rc-muted" style="font-size:12px">（不用再去问模型）</span></h2>
+                <details><summary>发票必须逐张上传，且上传后要等「采集」完成</summary><div class="rc-muted">一次传多张，系统只登记 1 张 —— 脚本已改成逐张。上传后系统要 OCR+查验，未完成时点「下一步」会被拒：<b>「存在采集中、待人工确认或异常的发票，不允许报销！」</b>；脚本会重试最多 6 分钟，仍失败请到「发票管理 → 待报销票据」处理。</div></details>
+                <details><summary>删掉草稿 ≠ 释放发票</summary><div class="rc-muted">删掉已保存的草稿后再跑，向导树显示 4 份但单据里<b>没有发票</b>（价税合计 0）。必须到「待报销票据」把这批<b>票据本身</b>删掉。判据：上传时<b>不再出现「已存在」</b>才算干净。</div></details>
+                <details><summary>分摊部门默认是「经办人」的部门</summary><div class="rc-muted">与出差人无关。规则：出差人所在部门 / 多人取职级最高者 / 同级取收款人部门。填了「分摊部门」会联动改「资金使用部门」。</div></details>
+                <details><summary>rowKey 不唯一 / 命中 0 行</summary><div class="rc-muted">往返两程会生成 2 行、两行部门名相同 → 必须用<b>数据字段</b>定位（如 <code>vstartplace=台州市</code>）；匹配串同时支持「字段=值」与裸文本。命中不了时脚本会把每个数据行的字段写进 <code>dump-S7-rows.json</code>。</div></details>
+                <details><summary>失败后怎么继续 / 为什么"删了还被拒"</summary><div class="rc-muted">退出码 10=重新登录；20=某步断言失败（先人工确认系统里有没有半成品草稿）。<b>重复建单默认不再拦截</b>：本机 <code>run.json</code> 里记过单据号时也只告警照跑（它读的是本机证据，不是 OA，所以你在 OA 删了草稿它不知道）——历史单据号会写进证据留痕；要拦就选「严格模式」。</div></details>
+                <details><summary>不想碰发票池的探测法</summary><div class="rc-muted">把「发票上传方式」设为<b>我手工传发票</b>、附件不含发票 → 生成一版探测工单，跑到 S7（不会保存、也不碰发票池），用它定 rowKey、验填写。</div></details>
+              </div>
+            </div>
+          </div>
+
+          <div class="rc-card">
+            <h2>批次历史</h2>
+            <table><thead><tr><th>批次</th><th>单据号</th><th>金额</th><th>状态</th><th>步骤</th><th>审计</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody id="history"></tbody></table>
+          </div>
+
+        </div>
+      </section>
+
     </div>
   </main>
 </div>
@@ -686,6 +1003,7 @@
   <button type="button" data-target="agents"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg><span>智能体</span></button>
   <button type="button" data-target="tasks"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg><span>任务</span></button>
   <button type="button" data-target="plugins"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-plug"/></svg><span>插件</span></button>
+  <button type="button" data-target="reimburse"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-reimburse"/></svg><span>报销</span></button>
 </nav>
 
 <div id="toastHost"></div>
@@ -696,7 +1014,7 @@
 
   var S = { agents: [], tasks: [], dsh: { bundles: [] }, today: '', ok: false, dshCmd: '', bridge: null, offline: false };
   var ICON = { workbuddy: 'i-buddy', opencode: 'i-code', 'opencode-acp': 'i-acp', dsh: 'i-plugin', chatgpt: 'i-chat' };
-  var TITLES = { console: '今日指挥舱', agents: '智能体模块', tasks: '任务派发', plugins: '插件舱' };
+  var TITLES = { console: '今日指挥舱', agents: '智能体模块', tasks: '任务派发', plugins: '插件舱', reimburse: '报销操作台' };
 
   /* 本地模式（file:// 直开）兜底数据：智能体档案，状态不可探测 */
   var FALLBACK_AGENTS = [
@@ -1363,6 +1681,460 @@
   setInterval(function () { loadUsage(true); }, 60000);
 })();
 
+</script>
+
+<!-- ════════════ 报销操作台逻辑 ════════════
+     移植自 oa-reimburse-draft/web/index.html 的内联脚本：
+       · 包在自己的 IIFE 里 → 与主界面（同样在 IIFE 内）零命名冲突
+       · 接口前缀 /api/reimburse/* → 由 Rust 反代到本机操作台服务（同源，无需 CORS）
+       · 只把需要被 inline onclick 调用的函数挂到 window.RC
+     业务逻辑一行没改：白名单、执行、SSE、复核卡都由技能自己的 server.mjs 负责。 -->
+<script>
+(function () {
+  'use strict';
+  var RC_API = '/api/reimburse';
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
+  var RC = {};
+  window.RC = RC;
+
+  var ENV = null, CHOSEN = null, CUR_RUN = null, DRY_OK = false, SVC = null;
+
+  /* 自己的 toast 宿主（主界面的 toast 在它自己的 IIFE 里，够不着） */
+  var toastHost = document.createElement('div');
+  toastHost.id = 'rcToastHost';
+  document.body.appendChild(toastHost);
+  function toast(msg, kind) {
+    var el = document.createElement('div');
+    el.className = 'rc-toast ' + (kind || '');
+    el.textContent = msg;
+    toastHost.appendChild(el);
+    setTimeout(function () { el.remove(); }, 6000);
+  }
+  RC.toast = toast;
+
+  async function api(p, opts) {
+    var r = await fetch(p, opts);
+    var ct = r.headers.get('content-type') || '';
+    if (ct.indexOf('json') >= 0) {
+      var j = await r.json();
+      if (!r.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.payload = j; e.status = r.status; throw e; }
+      return j;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  }
+
+  /* ── 服务生命周期（Rust 侧端点，不走反代）────────────────────── */
+  async function svcRefresh(autoStart) {
+    var chip = $('rcSvcChip'), btn = $('rcSvcBtn');
+    try {
+      SVC = await api('/api/reimburse/service', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status' })
+      });
+    } catch (e) { SVC = null; }
+    if (!SVC) {
+      if (chip) { chip.className = 'rc-chip bad'; chip.textContent = '服务状态查不到'; }
+      return;
+    }
+    if (!SVC.enabled) {
+      chip.className = 'rc-chip warn'; chip.textContent = '已在 reimburse.json 里禁用';
+      if (btn) btn.disabled = true;
+      return;
+    }
+    if (!SVC.serverJsExists) {
+      chip.className = 'rc-chip bad';
+      chip.textContent = '找不到 server.mjs —— 检查 reimburse.json 的 skillRoot';
+      if (btn) btn.disabled = true;
+      return;
+    }
+    if (btn) btn.disabled = false;
+    if (SVC.running) {
+      chip.className = 'rc-chip ok';
+      chip.textContent = '操作台服务已运行 · 端口 ' + SVC.port + (SVC.pid ? ' · PID ' + SVC.pid : '');
+      if (btn) { btn.textContent = '停止服务'; btn.setAttribute('data-mode', 'stop'); }
+    } else {
+      chip.className = 'rc-chip warn';
+      chip.textContent = '操作台服务未启动（端口 ' + SVC.port + '）';
+      if (btn) { btn.textContent = '启动服务'; btn.setAttribute('data-mode', 'start'); }
+      if (autoStart) await svcStart();
+    }
+  }
+  async function svcStart() {
+    var chip = $('rcSvcChip');
+    if (chip) { chip.className = 'rc-chip warn'; chip.textContent = '正在启动操作台服务…'; }
+    try {
+      var r = await api('/api/reimburse/service', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' })
+      });
+      if (r.ok) { toast('操作台服务已启动' + (r.already ? '（本来就在跑）' : '（PID ' + r.pid + '）'), 'ok'); await svcRefresh(false); loadEnv(); }
+      else { toast('启动失败：' + (r.reason || '未知') + (r.error ? ' · ' + r.error : ''), 'bad'); await svcRefresh(false); }
+    } catch (e) { toast('启动失败：' + e.message, 'bad'); }
+  }
+  async function svcStop() {
+    try {
+      var r = await api('/api/reimburse/service', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' })
+      });
+      toast(r.ok ? ('已停止服务' + (r.already ? '（本来就没跑）' : '（PID ' + r.pid + '）')) : '停止失败', r.ok ? 'ok' : 'bad');
+    } catch (e) { toast('停止失败：' + e.message, 'bad'); }
+    await svcRefresh(false);
+  }
+  RC.svcToggle = function () {
+    var btn = $('rcSvcBtn');
+    if (btn && btn.getAttribute('data-mode') === 'stop') svcStop(); else svcStart();
+  };
+
+  /* 用系统浏览器开外链（webview 里 target=_blank 不可靠） */
+  RC.openUrl = async function (url) {
+    try { await api('/api/openurl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) }); }
+    catch (e) { toast('打开失败：' + e.message, 'bad'); }
+  };
+
+  /* ── 环境与状态 ─────────────────────────────────────────────── */
+  async function loadEnv() {
+    var chips = $('envChips'), redline = $('redline');
+    try {
+      ENV = await api(RC_API + '/env');
+      var l = ENV.login || {};
+      chips.innerHTML = [
+        '<span class="rc-chip">Node <b>' + esc(ENV.node) + '</b></span>',
+        '<span class="rc-chip ' + (ENV.python ? 'ok' : 'bad') + '">Python <b>' + (ENV.python ? '就绪' : '缺失') + '</b></span>',
+        '<span class="rc-chip ' + (l.exists ? (l.ageHours > 12 ? 'warn' : 'ok') : 'bad') + '">登录态 <b>' + (l.exists ? l.ageHours + ' 小时前' : '无（先登录）') + '</b></span>',
+        '<span class="rc-chip">真源 <b>' + esc((ENV.fingerprint || {}).fieldsUpdated || '?') + '</b></span>',
+        '<span class="rc-chip">白名单 <b>' + esc(((ENV.truth || {}).allowedFillColumns || []).join(' / ')) + '</b></span>',
+        '<span class="rc-chip">不写 <b>' + (((ENV.truth || {}).neverWriteColumns || []).length) + ' 列</b></span>'
+      ].join('');
+      redline.innerHTML = '红线：<b>只填不提交</b> · 写入白名单只有 <b>' + esc(((ENV.truth || {}).allowedFillColumns || []).join(' / ')) + '</b> · <b>金额一律不碰</b>（系统从发票自动录入） · 保存草稿后由<b>你本人</b>去 OA 点提交';
+      fillSelect($('f_travelType'), optsFrom(ENV.truth && ENV.truth.judgement, '出差类型') || ['公务出差', '党务工作']);
+      fillSelect($('f_leader'), ['普通员工', '部门主要负责人', '分管领导', '主要领导']);
+      $('deptHints').innerHTML = (ENV.deptSuggestions || []).map(function (d) { return '<option value="' + esc(d) + '">'; }).join('');
+      renderHistory(); loadJobs(); loadBatches(); loadConfigs();
+      if (!CHOSEN) $('browsePath').value = ENV.defaultBrowseRoot;
+    } catch (e) {
+      var offline = e.status === 502 || (e.payload && e.payload.reason === 'upstream_unreachable');
+      chips.innerHTML = '<span class="rc-chip bad">' + (offline ? '操作台服务未启动' : '连不上本地服务') + '</span>';
+      redline.innerHTML = offline
+        ? '操作台服务没在跑（端口 8790）。点上面的 <b>「启动服务」</b> 即可 —— 它起的是技能自带的 <code>web/server.mjs</code>，只监听 127.0.0.1。'
+        : '没连上本地服务：' + esc(e.message);
+    }
+  }
+  RC.loadEnv = loadEnv;
+  function optsFrom(judgement, key) { try { return (judgement && judgement[key] && judgement[key].options) || null; } catch (e) { return null; } }
+  function fillSelect(sel, arr) { sel.innerHTML = (arr || []).map(function (v) { return '<option>' + esc(v) + '</option>'; }).join(''); }
+
+  function loadJobs(keep) {
+    var sel = $('f_job'); var cur = sel.value;
+    sel.innerHTML = ((ENV && ENV.jobs) || []).map(function (j) {
+      return '<option value="' + esc(j.path) + '">' + esc(j.jobId) + '（' + (j.rows == null ? '?' : j.rows) + ' 行）</option>';
+    }).join('');
+    if (keep && cur) sel.value = cur;
+  }
+  RC.loadJobs = loadJobs;
+  function loadBatches() {
+    var sel = $('f_batch'); var cur = sel.value;
+    sel.innerHTML = ((ENV && ENV.batches) || []).map(function (b) { return '<option value="' + esc(b.jobId) + '">' + esc(b.jobId) + '</option>'; }).join('');
+    if (cur) sel.value = cur;
+    renderBatch();
+  }
+  function loadConfigs() { /* 预留：配置列表渲染到 datalist */ }
+
+  function renderHistory() {
+    $('history').innerHTML = ((ENV && ENV.batches) || []).map(function (b) {
+      var a = b.audit;
+      var audit = a
+        ? '<span class="rc-chip ' + (a.submitClicked ? 'bad' : 'ok') + '">' + a.totalClicks + '点击/' + a.forbiddenClicks + '禁止/' + (a.submitClicked ? '点过提交!' : '未点提交') + '</span>'
+        : '<span class="rc-muted">—</span>';
+      return '<tr>' +
+        '<td>' + esc(b.jobId) + '</td>' +
+        '<td>' + (b.billNo ? '<b>' + esc(b.billNo) + '</b>' : '<span class="rc-muted">—</span>') + '</td>' +
+        '<td>' + (b.totalAmount ? '￥' + esc(b.totalAmount) : '<span class="rc-muted">—</span>') + '</td>' +
+        '<td>' + statusChip(b.status, b.currentStep) + '</td>' +
+        '<td class="rc-muted">' + (b.steps || []).join(' ') + '</td>' +
+        '<td>' + audit + '</td>' +
+        '<td class="rc-muted">' + (b.finishedAt ? esc(b.finishedAt.slice(0, 19).replace('T', ' ')) : '—') + '</td>' +
+        '<td><button class="rc-btn sm" type="button" onclick="RC.pickBatch(\'' + esc(b.jobId) + '\')">查看</button> ' +
+        (b.hasCard ? '<a class="rc-btn sm" href="' + RC_API + '/evidence?jobId=' + encodeURIComponent(b.jobId) + '&file=' + encodeURIComponent('待复核.xlsx') + '">复核卡</a>' : '') +
+        ' <button class="rc-btn sm" type="button" onclick="RC.makeCard(\'' + esc(b.jobId) + '\')">生成卡</button></td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="8" class="rc-muted">还没有批次</td></tr>';
+  }
+  function statusChip(st, step) {
+    if (st === 'saved-draft') return '<span class="rc-chip ok">已保存草稿</span>';
+    if (st === 'stopped-early') return '<span class="rc-chip warn">提前停止 ' + esc(step || '') + '</span>';
+    if (st === 'failed') return '<span class="rc-chip bad">失败 ' + esc(step || '') + '</span>';
+    if (st === 'running') return '<span class="rc-chip warn">运行中</span>';
+    return '<span class="rc-chip">' + esc(st || '未知') + '</span>';
+  }
+  RC.pickBatch = function (id) {
+    $('f_batch').value = id; renderBatch();
+    var d = $('batchDetail'); if (d && d.scrollIntoView) d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  /* ── 目录浏览 ───────────────────────────────────────────────── */
+  async function browse(p) {
+    var target = p || $('browsePath').value;
+    try {
+      var d = await api(RC_API + '/dirs?path=' + encodeURIComponent(target));
+      $('browsePath').value = d.path;
+      $('dirs').innerHTML = ['<div class="rc-navrow"><button class="rc-btn sm" type="button" onclick="RC.browse(' + JSON.stringify(d.parent).replace(/"/g, '&quot;') + ')">⬆ 上一级</button></div>']
+        .concat(d.dirs.map(function (x) {
+          return '<div class="rc-navrow"><button class="rc-btn sm" type="button" onclick="RC.browse(' + JSON.stringify(d.path + '\\' + x).replace(/"/g, '&quot;') + ')">📁 ' + esc(x) + '</button></div>';
+        })).join('');
+      var files = d.files || [];
+      var folderOpts = function (sel) {
+        return ['（按规则）'].concat(((ENV && ENV.truth && ENV.truth.folders) || [])).map(function (x) {
+          return '<option' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>';
+        }).join('');
+      };
+      $('files').innerHTML = files.map(function (f) {
+        var dir = f.folder;
+        var cls = !dir ? 'f-bad' : (dir === '发票' ? 'f-invoice' : 'f-other');
+        return '<div class="rc-file"><span class="rc-tag ' + cls + '">' + esc(dir || '无法归类') + '</span>' +
+          '<span style="flex:1">' + esc(f.name) + '</span>' +
+          '<span class="rc-muted">' + (f.size / 1024).toFixed(0) + ' KB · ' + esc(f.how) + '</span>' +
+          '<select class="ovSel" data-file="' + esc(f.name) + '" data-auto="' + esc(dir || '') + '" style="width:190px">' + folderOpts(dir || '') + '</select></div>';
+      }).join('') || '<div class="rc-muted">（这个目录没有文件）</div>';
+      $('overrideBox').style.display = files.length ? 'block' : 'none';
+      $('overrides').innerHTML = '<div class="rc-muted" style="font-size:12px">只显示你改过的（右边下拉不选「（按规则）」即生效）：</div><div id="ovList" class="rc-muted"></div>';
+      $('files').addEventListener('change', syncOverrides);
+      if (!$('f_jobId').value && d.path) $('f_jobId').value = new Date().toISOString().slice(0, 10) + '-' + d.path.split(/[\\/]/).pop();
+    } catch (e) { toast('目录打不开：' + e.message, 'bad'); }
+  }
+  RC.browse = browse;
+  RC.browseUp = function () { browse($('browsePath').value.replace(/[\\/][^\\/]*$/, '')); };
+  RC.useBatchDir = function () {
+    CHOSEN = $('browsePath').value;
+    $('chosenDir').textContent = '已选：' + CHOSEN;
+    var n = $('files').querySelectorAll('.rc-file').length;
+    toast('票据目录已选（' + n + ' 个条目）', 'ok');
+  };
+
+  function syncOverrides() {
+    var all = document.querySelectorAll('.ovSel');
+    var changed = [].filter.call(all, function (s) { return s.value && s.value !== '（按规则）' && s.value !== s.dataset.auto; });
+    var list = $('ovList');
+    if (!list) return;
+    list.innerHTML = changed.length
+      ? changed.map(function (s) { return '<div class="rc-row"><span style="flex:1">' + esc(s.dataset.file) + '</span><span class="rc-chip">→ ' + esc(s.value) + '</span></div>'; }).join('')
+      : '<div class="rc-muted">（没有覆盖）</div>';
+  }
+
+  /* ── 表单 → 配置 ────────────────────────────────────────────── */
+  RC.mealMode = function () {
+    var m = document.querySelector('input[name=meal]:checked').value;
+    $('mealImage').style.display = m === 'image' ? 'grid' : 'none';
+  };
+  function memoText() {
+    var tpl = $('f_tpl').value || '[{部门简称}]{出差人}{备注}差旅费';
+    var persons = splitList($('f_persons').value);
+    return tpl.replaceAll('{部门简称}', $('f_dept').value).replaceAll('{出差人}', persons[0] || '')
+      .replaceAll('{备注}', $('f_reason').value).replaceAll('{事由}', $('f_reason').value);
+  }
+  var rcRootEl = $('rcRoot');
+  rcRootEl.addEventListener('input', function () { $('memoPreview').textContent = memoText() || '—'; });
+
+  function splitList(s) { return String(s || '').split(/[,，、]/).map(function (x) { return x.trim(); }).filter(Boolean); }
+
+  function buildConfig() {
+    var persons = splitList($('f_persons').value);
+    var meal = document.querySelector('input[name=meal]:checked').value;
+    var keys = splitList($('f_rowKeys').value);
+    var cfg = {
+      _说明: '由指挥台「报销操作台」页面生成（public/index.html）',
+      jobId: $('f_jobId').value.trim(),
+      部门简称: $('f_dept').value.trim(),
+      出差类型: $('f_travelType').value,
+      领导出差: $('f_leader').value,
+      出差人员: persons,
+      事由: $('f_reason').value.trim(),
+      报销说明模板: $('f_tpl').value.trim() || '[{部门简称}]{出差人}{备注}差旅费',
+      发票上传: $('f_invoice').value
+    };
+    if (meal === 'none') cfg['无伙食补助'] = true;
+    if (meal === 'image') { cfg['伙食费'] = Number($('f_meal').value || 0); cfg['伙食费来源'] = $('f_mealSrc').value.trim(); }
+    var payee = { 姓名: $('f_payee').value.trim() };
+    if ($('f_bank').value.trim()) payee['开户行'] = $('f_bank').value.trim();
+    if ($('f_tail').value.trim()) payee['账号后四位'] = $('f_tail').value.trim();
+    cfg['收款方'] = payee;
+    var dept = $('f_allocDept').value.trim();
+    if (dept) cfg['分摊部门'] = { 值: dept, 依据: $('f_allocBasis').value.trim() || '(未注明依据)' };
+    if (keys.length === 1) cfg['明细定位'] = { rowKey: keys[0] };
+    else if (keys.length > 1) cfg['明细定位'] = { rowKeys: keys };
+    if ($('f_onlyMemo').checked && cfg['明细定位']) cfg['明细定位'].fillKeys = ['报销说明'];
+    var ov = {};
+    [].forEach.call(document.querySelectorAll('.ovSel'), function (s) {
+      if (s.value && s.value !== '（按规则）' && s.value !== s.dataset.auto) ov[s.dataset.file] = s.value;
+    });
+    cfg.folderOverrides = ov;
+    return cfg;
+  }
+
+  async function saveConfig(quiet) {
+    var cfg = buildConfig();
+    if (!cfg.jobId) { toast('请先填批次标识 jobId', 'bad'); return null; }
+    try {
+      var r = await api(RC_API + '/exec', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cmd: 'save-config', args: { jobId: cfg.jobId, config: cfg, overwrite: true } })
+      });
+      $('cfgPath').textContent = '配置：' + r.path.split('\\').pop();
+      if (!quiet) toast('配置已保存：' + r.path.split('\\').pop(), 'ok');
+      return r.path;
+    } catch (e) { toast('保存配置失败：' + e.message, 'bad'); return null; }
+  }
+  RC.saveConfig = saveConfig;
+
+  RC.dryRun = async function () {
+    var p = await saveConfig(true);
+    if (!p) return;
+    if (!CHOSEN) { toast('请先在①里选票据目录（点「用这个目录」）', 'bad'); return; }
+    DRY_OK = false; $('btnMakeJob').disabled = true;
+    await exec('make-job', { configPath: p, batchDir: CHOSEN, dryRun: true });
+    toast('看日志里的「工单摘要」，核对无误后勾选确认再生成工单', '');
+  };
+  RC.makeJob = async function (custom) {
+    var p = await saveConfig(true);
+    if (!p) return;
+    if (!CHOSEN) { toast('请先选票据目录', 'bad'); return; }
+    if (!custom && !$('confirmDry').checked) { toast('请先勾选「我已核对摘要」', 'bad'); return; }
+    var out = custom ? prompt('生成到（留空=默认 runner/jobs/<jobId>.json）', '') : '';
+    await exec('make-job', { configPath: p, batchDir: CHOSEN, out: out || undefined });
+    setTimeout(loadEnv, 3000);
+  };
+  $('confirmDry').addEventListener('change', function (e) { $('btnMakeJob').disabled = !e.target.checked; });
+
+  /* ── 执行与日志（SSE）──────────────────────────────────────── */
+  async function exec(cmd, args) {
+    args = args || {};
+    try {
+      var r = await api(RC_API + '/exec', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cmd: cmd, args: args })
+      });
+      if (!r.runId) throw new Error(r.error || '没有 runId');
+      openStream(r.runId, cmd);
+      return r.runId;
+    } catch (e) { toast('启动失败：' + e.message, 'bad'); return null; }
+  }
+  RC.exec = exec;
+  function openStream(runId, cmd) {
+    if (CUR_RUN) { try { CUR_RUN.close(); } catch (e) { } }
+    var log = $('log'); log.textContent = '';
+    $('logLabel').textContent = '· ' + cmd;
+    var es = new EventSource(RC_API + '/run?runId=' + encodeURIComponent(runId));
+    CUR_RUN = es;
+    $('stepBadges').innerHTML = '';
+    es.addEventListener('meta', function (ev) {
+      var m = JSON.parse(ev.data);
+      $('logLabel').textContent = '· ' + m.label + ' · ' + m.cmd;
+      $('runState').textContent = '运行中…';
+    });
+    es.onmessage = function (ev) { var d = JSON.parse(ev.data); appendLog(d.t); };
+    es.addEventListener('end', function (ev) {
+      var d = JSON.parse(ev.data);
+      appendLog('\n── 结束：' + (d.status === 'ok' ? '成功（退出码 0）' : '失败') + (d.note ? ' · ' + d.note : '') + '\n');
+      $('runState').textContent = d.status === 'ok' ? '上次：成功' : '上次：失败（' + d.code + '）';
+      es.close(); CUR_RUN = null;
+      loadEnv();
+    });
+    es.onerror = function () { appendLog('\n[日志流断开 —— 服务可能已停止]\n'); es.close(); CUR_RUN = null; };
+  }
+  function appendLog(t) {
+    var log = $('log');
+    var atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+    var span = document.createElement('span');
+    var cls = /❌|失败|错误|Error|error/.test(t) ? 'l-bad' : /⚠/.test(t) ? 'l-warn' : /✅|通过/.test(t) ? 'l-ok' : /^--- S\d/.test(t) ? 'l-step' : '';
+    span.className = cls; span.textContent = t;
+    log.appendChild(span);
+    markSteps(log.textContent);
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  }
+  function markSteps(text) {
+    var m = [], done = [], bad = [], x;
+    var re1 = /--- (S\d) ---/g, re2 = /✅ (S\d) 通过/g, re3 = /❌ (S\d) 失败/g;
+    while ((x = re1.exec(text))) m.push(x[1]);
+    while ((x = re2.exec(text))) done.push(x[1]);
+    while ((x = re3.exec(text))) bad.push(x[1]);
+    $('stepBadges').innerHTML = m.map(function (s) {
+      return '<span class="rc-step ' + (bad.indexOf(s) >= 0 ? 'bad' : done.indexOf(s) >= 0 ? 'ok' : 'run') + '">' + s + '</span>';
+    }).join('');
+  }
+  RC.copyLog = function () {
+    var txt = $('log').textContent;
+    var done = function () { toast('日志已复制', 'ok'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, function () { fallbackCopy(txt, done); });
+    } else fallbackCopy(txt, done);
+  };
+  function fallbackCopy(txt, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done();
+    } catch (e) { toast('复制失败，请手动选中日志', 'bad'); }
+  }
+
+  RC.runJob = async function () {
+    var jobPath = $('f_job').value;
+    if (!jobPath) { toast('没有工单 —— 先在左边生成一版', 'bad'); return; }
+    var strict = $('f_gate').value === 'strict';
+    if (strict && !confirm('严格模式：本机记录里已有单据号时会拒绝重跑。继续？')) return;
+    await exec('run-job', { jobPath: jobPath, stopAt: $('f_stopAt').value || undefined, strictDup: strict });
+  };
+
+  /* ── 复核卡与证据 ───────────────────────────────────────────── */
+  RC.makeCard = async function (jobId) {
+    var id = jobId || $('f_batch').value;
+    if (!id) { toast('先选一个批次', 'bad'); return; }
+    await exec('review-card', { jobId: id });
+    setTimeout(loadEnv, 2500);
+  };
+  function renderBatch() {
+    var id = $('f_batch').value;
+    var b = ((ENV && ENV.batches) || []).filter(function (x) { return x.jobId === id; })[0];
+    if (!b) { $('batchDetail').innerHTML = '<div class="rc-muted">（选一个批次）</div>'; $('submitReminder').style.display = 'none'; return; }
+    var a = b.audit;
+    $('batchDetail').innerHTML =
+      '<div class="rc-kv" style="margin-top:8px">' +
+      '<div>单据号</div><div><b>' + esc(b.billNo || '（还没保存到草稿）') + '</b></div>' +
+      '<div>价税合计</div><div>' + (b.totalAmount ? '￥' + esc(b.totalAmount) : '—') + '</div>' +
+      '<div>状态</div><div>' + statusChip(b.status, b.currentStep) + '</div>' +
+      '<div>异常项</div><div>' + (b.exceptions ? b.exceptions + ' 条（见复核卡）' : '0 条') + '</div>' +
+      ((b.previousBillNos || []).length ? '<div>历史单据号</div><div>' + b.previousBillNos.map(esc).join('、') + ' <span class="rc-chip warn">本次为重复建单</span></div>' : '') +
+      '<div>点击审计</div><div>' + (a ? (a.totalClicks + ' 次点击 · 禁止 ' + a.forbiddenClicks + ' 次 · ' + (a.submitClicked ? '<b style="color:var(--danger)">点过提交！</b>' : '从未点过提交 ✅')) : '—') + '</div>' +
+      '<div>证据文件</div><div>' + ((b.files || []).map(function (f) {
+        return '<a href="' + RC_API + '/evidence?jobId=' + encodeURIComponent(b.jobId) + '&file=' + encodeURIComponent(f) + '">' + esc(f) + '</a>';
+      }).join(' · ') || '—') + '</div>' +
+      ((b.history || []).length ? '<div>历史证据</div><div>' + b.history.map(function (f) {
+        return '<a href="' + RC_API + '/evidence?jobId=' + encodeURIComponent(b.jobId) + '&file=' + encodeURIComponent('history/' + f) + '">' + esc(f) + '</a>';
+      }).join(' · ') + '<div class="rc-hint">（重跑时自动归档的上一轮证据，防止被覆盖）</div></div>' : '') +
+      '</div>';
+    $('submitReminder').style.display = b.billNo ? 'block' : 'none';
+  }
+  RC.renderBatch = renderBatch;
+
+  /* ── 懒初始化：第一次切到这个栏目时才连服务（并自动把它拉起来）── */
+  var section = document.querySelector('[data-section="reimburse"]');
+  var booted = false;
+  function boot() {
+    if (booted) return;
+    booted = true;
+    svcRefresh(true).then(function () { return loadEnv(); });
+    setInterval(function () { if (!CUR_RUN) loadEnv(); }, 15000);
+  }
+  if (section) {
+    if (section.classList.contains('active')) boot();
+    else if (window.MutationObserver) {
+      new MutationObserver(function () {
+        if (section.classList.contains('active')) boot();
+      }).observe(section, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
+})();
 </script>
 </body>
 </html>

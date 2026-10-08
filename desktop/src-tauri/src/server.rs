@@ -1,4 +1,4 @@
-﻿use arboard::Clipboard;
+use arboard::Clipboard;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tiny_http::{Header, Method, Response, Server};
+use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 pub fn project_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -677,6 +677,14 @@ fn handle_api(shared: &Arc<Mutex<Value>>, path: &str, body: &Value) -> (u32, Val
                 (400, json!({ "ok": false, "reason": "bad_payload" }))
             }
         }
+        "/api/reimburse/service" => {
+            // 起 / 停 / 查 技能自带的 web/server.mjs。Rust 只做生命周期，不碰业务。
+            match body.get("action").and_then(|a| a.as_str()).unwrap_or("status") {
+                "start" => (200, rc_start()),
+                "stop" => (200, rc_stop()),
+                _ => (200, rc_status()),
+            }
+        }
         _ => (404, json!({ "ok": false, "reason": "not_found" })),
     }
 }
@@ -687,7 +695,8 @@ fn now36() -> String {
 
 fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
     let method = req.method().clone();
-    let path = req.url().split('?').next().unwrap_or("/").to_string();
+    let raw_url = req.url().to_string(); // 含 query —— 反代要原样透传
+    let path = raw_url.split('?').next().unwrap_or("/").to_string();
 
     let mut body = String::new();
     if method == Method::Post {
@@ -763,6 +772,16 @@ fn handle(mut req: tiny_http::Request, shared: &Arc<Mutex<Value>>) {
         let h1 = Header::from_bytes("Content-Type", "application/json; charset=utf-8").unwrap();
         let h2 = Header::from_bytes("Content-Disposition", "attachment; filename=\"agent-console-backup.json\"").unwrap();
         let _ = req.respond(Response::from_string(payload.to_string()).with_header(h1).with_header(h2));
+        return;
+    }
+
+    // 差旅费报销操作台：整段 /api/reimburse/* 反代到本地 Node 服务（含 SSE 实时日志）。
+    // 必须放在这里而不是 handle_api 里：SSE 要**边收边发**，不能先读成 Value 再回。
+    // 例外：/api/reimburse/service 是本机自己的服务管理端点，不走上游。
+    if (path == "/api/reimburse" || path.starts_with("/api/reimburse/"))
+        && path != "/api/reimburse/service"
+    {
+        rc_proxy(req, &method, &raw_url, &body);
         return;
     }
 
@@ -1411,6 +1430,230 @@ fn log_line(msg: &str) {
         .open(project_dir().join("desktop.log"))
     {
         let _ = writeln!(f, "[{}] {}", ts, msg);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 差旅费报销操作台接线（技能 oa-reimburse-draft）
+// ════════════════════════════════════════════════════════════════════════════
+// 分工（重要，别把业务搬进来）：
+//   · Rust 侧只做两件事 —— ① 起/停/查技能自带的 web/server.mjs；② 把 /api/reimburse/*
+//     反代给它。**不复制任何业务逻辑**。
+//   · 真正的执行者永远是 server.mjs + runner/：命令白名单、jobPath/configPath 必须落在
+//     runner/ 下、只调 login.mjs 不碰凭证 —— 这些是技能红线（K1 只填不提交 / K10 不碰凭证）。
+//     在 Rust 里再实现一遍必然与技能漂移，所以这里保持单一真源。
+//   · 用反代而不是让页面直连 8790：页面与接口同源（127.0.0.1:8766），既不必给 server.mjs
+//     加 CORS（那等于让任意本机网页都能调它的白名单命令），也不改技能一行代码。
+// 配置：reimburse.json（每次调用都回读 → 改完即生效，不用重启应用）
+
+#[derive(Clone)]
+struct RcCfg {
+    enabled: bool,
+    skill_root: String,
+    port: u16,
+    node: String,
+}
+
+fn rc_cfg_path() -> PathBuf {
+    project_dir().join("reimburse.json")
+}
+
+fn rc_cfg_load() -> RcCfg {
+    let v = read_json(&rc_cfg_path(), json!({}));
+    RcCfg {
+        enabled: v.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true),
+        skill_root: v.get("skillRoot").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        port: v.get("port").and_then(|n| n.as_u64()).unwrap_or(8790).clamp(1, 65535) as u16,
+        node: v.get("node").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+    }
+}
+
+fn rc_server_js(cfg: &RcCfg) -> PathBuf {
+    PathBuf::from(&cfg.skill_root).join("web").join("server.mjs")
+}
+
+/// 探端口判活。比记 PID 可靠：用户自己双击 .cmd 起的那一份也能认出来。
+fn rc_port_open(port: u16) -> bool {
+    use std::net::{Ipv4Addr, SocketAddrV4};
+    let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    TcpStream::connect_timeout(&addr.into(), Duration::from_millis(600)).is_ok()
+}
+
+/// 按监听端口反查 PID（用于停掉「不是本进程启动的」那一份）
+fn rc_pid_on_port(port: u16) -> Option<u32> {
+    let out = Command::new("netstat").args(["-ano", "-p", "TCP"]).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let needle = format!(":{}", port);
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() >= 5
+            && f[0].eq_ignore_ascii_case("TCP")
+            && f[1].ends_with(&needle)
+            && f[3].eq_ignore_ascii_case("LISTENING")
+        {
+            if let Ok(p) = f[4].parse::<u32>() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+static RC_CHILD: std::sync::OnceLock<Mutex<Option<u32>>> = std::sync::OnceLock::new();
+fn rc_child_slot() -> &'static Mutex<Option<u32>> {
+    RC_CHILD.get_or_init(|| Mutex::new(None))
+}
+
+fn rc_status() -> Value {
+    let cfg = rc_cfg_load();
+    let js = rc_server_js(&cfg);
+    let pid = rc_pid_on_port(cfg.port);
+    json!({
+        "ok": true,
+        "enabled": cfg.enabled,
+        "running": pid.is_some(),
+        "pid": pid,
+        "port": cfg.port,
+        "skillRoot": cfg.skill_root,
+        "serverJs": js.to_string_lossy(),
+        "serverJsExists": js.exists(),
+        "node": if cfg.node.is_empty() { "node（PATH）".to_string() } else { cfg.node.clone() },
+    })
+}
+
+fn rc_start() -> Value {
+    let cfg = rc_cfg_load();
+    if !cfg.enabled {
+        return json!({ "ok": false, "reason": "disabled" });
+    }
+    let js = rc_server_js(&cfg);
+    if !js.exists() {
+        return json!({ "ok": false, "reason": "server_js_missing", "serverJs": js.to_string_lossy() });
+    }
+    if let Some(p) = rc_pid_on_port(cfg.port) {
+        return json!({ "ok": true, "already": true, "pid": p, "port": cfg.port });
+    }
+    let node = if cfg.node.is_empty() { "node".to_string() } else { cfg.node.clone() };
+    let mut cmd = Command::new(&node);
+    cmd.arg(&js)
+        .arg("--no-open") // 别让它自己开浏览器：我们在指挥台窗口里看
+        .arg("--port")
+        .arg(cfg.port.to_string())
+        .current_dir(PathBuf::from(&cfg.skill_root));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW：不弹黑窗
+    }
+    match cmd.spawn() {
+        Ok(child) => {
+            let pid = child.id();
+            *rc_child_slot().lock().unwrap() = Some(pid);
+            log_line(&format!("reimburse: service spawned pid={} port={}", pid, cfg.port));
+            // 等端口真起来（最多 8 秒）——server.mjs 要 import 依赖，冷启动不总是瞬时
+            let mut up = false;
+            for _ in 0..40 {
+                if rc_port_open(cfg.port) {
+                    up = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            json!({
+                "ok": up, "pid": pid, "port": cfg.port,
+                "reason": if up { Value::Null } else { json!("start_timeout") }
+            })
+        }
+        Err(e) => json!({ "ok": false, "reason": "spawn_failed", "error": e.to_string() }),
+    }
+}
+
+fn rc_stop() -> Value {
+    let cfg = rc_cfg_load();
+    let Some(pid) = rc_pid_on_port(cfg.port) else {
+        *rc_child_slot().lock().unwrap() = None;
+        return json!({ "ok": true, "already": true, "reason": "not_running" });
+    };
+    // /T 连子进程一起收：跑作业时 server.mjs 会挂 playwright/Chrome
+    let ok = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if ok {
+        *rc_child_slot().lock().unwrap() = None;
+        log_line(&format!("reimburse: service killed pid={}", pid));
+    }
+    json!({ "ok": ok, "pid": pid, "port": cfg.port })
+}
+
+/// 把 /api/reimburse/* 反代到本地操作台服务。
+/// data_length = None → tiny_http 走 chunked，**边收边发**，SSE 实时日志靠的就是这个。
+/// 注意：一条 SSE 会占住一个 worker 线程直到流结束（服务端共 4 个），够用，但别同时开多条。
+fn rc_proxy(req: tiny_http::Request, method: &Method, raw_url: &str, body: &str) {
+    let cfg = rc_cfg_load();
+    if !cfg.enabled {
+        return json_response(req, 503, json!({ "ok": false, "reason": "disabled" }));
+    }
+    // /api/reimburse/env?x=1  →  /api/env?x=1
+    let tail = raw_url.strip_prefix("/api/reimburse").unwrap_or("");
+    let url = format!("http://127.0.0.1:{}/api{}", cfg.port, tail);
+
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(3))
+        .timeout_read(Duration::from_secs(3600)) // 长连接日志流；普通请求不会等这么久
+        .timeout_write(Duration::from_secs(30))
+        .build();
+
+    let result = if *method == Method::Post {
+        agent
+            .post(&url)
+            .set("Content-Type", "application/json")
+            .send_string(body)
+    } else {
+        agent.get(&url).call()
+    };
+
+    match result {
+        Ok(resp) => {
+            let code = resp.status();
+            let mut headers: Vec<Header> = Vec::new();
+            if let Some(v) = resp.header("content-type") {
+                if let Ok(h) = Header::from_bytes("Content-Type", v.as_bytes()) {
+                    headers.push(h);
+                }
+            }
+            if let Some(v) = resp.header("content-disposition") {
+                if let Ok(h) = Header::from_bytes("Content-Disposition", v.as_bytes()) {
+                    headers.push(h);
+                }
+            }
+            match resp.header("cache-control") {
+                Some(v) => {
+                    if let Ok(h) = Header::from_bytes("Cache-Control", v.as_bytes()) {
+                        headers.push(h);
+                    }
+                }
+                None => headers.push(Header::from_bytes("Cache-Control", "no-store").unwrap()),
+            }
+            let reader = resp.into_reader();
+            let out = Response::new(StatusCode(code), headers, reader, None, None);
+            let _ = req.respond(out);
+        }
+        Err(e) => {
+            // 上游没起来时给页面一个可读原因（页面据此提示「先启动服务」）
+            log_line(&format!("reimburse: proxy failed {} -> {}", raw_url, e));
+            json_response(
+                req,
+                502,
+                json!({
+                    "ok": false,
+                    "reason": "upstream_unreachable",
+                    "port": cfg.port,
+                    "error": e.to_string(),
+                }),
+            );
+        }
     }
 }
 

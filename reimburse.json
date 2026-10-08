@@ -1,0 +1,10 @@
+{
+  "_说明": "差旅费报销操作台（oa-reimburse-draft 技能）的接线配置。改完 2 秒内自动生效，不用重启应用。",
+  "_skillRoot说明": "技能根目录。Rust 端只在这里定位 web/server.mjs；找不到就把 enabled 置 false，界面会提示路径不对。",
+  "_port说明": "本地操作台服务端口。应用把它反代到 /api/reimburse/*，所以页面是同源的，不需要 CORS。",
+  "_node说明": "node 可执行文件路径。留空 = 用 PATH 里的 node。",
+  "enabled": true,
+  "skillRoot": "D:\\自动化工作流0927\\.dsh\\skills\\oa-reimburse-draft",
+  "port": 8790,
+  "node": ""
+}

@@ -1,7 +1,8 @@
 # 智能体指挥台 · agent-console
 
 一个 Windows 桌面工作台：把本机的 AI 工具（WorkBuddy / OpenCode / DeepSeek Harness / ChatGPT 等）
-当"员工"管理 —— **状态实时监测 → 一键唤起置顶 → 任务派发**，外加 **用量/余额监测** 与 **鲸鱼娘桌面宠物**。
+当"员工"管理 —— **状态实时监测 → 一键唤起置顶 → 任务派发**，外加 **用量/余额监测**、**鲸鱼娘桌面宠物**，
+以及把差旅费报销自动化（技能 `oa-reimburse-draft`）内嵌成左侧第五栏的 **报销操作台**。
 
 技术栈：**Tauri v2（Rust + WebView2）**，内置纯 Rust HTTP 服务，前端为原生 HTML/CSS/JS（无构建步骤）。
 运行内存约 40 MB，可执行文件约 6 MB，托盘常驻。
@@ -21,6 +22,18 @@
 - **OpenCode Go 用量面板**：5 小时 / 本周 / 本月三档进度条，60s 自动刷新
 - 顶栏 ✦ 按钮：显隐鲸鱼娘宠物
 
+### 报销操作台（main 窗口左侧第五栏）
+把技能 `oa-reimburse-draft` 的网页操作台**移植进主窗口**：不另开浏览器、不另起页面，
+在指挥台里把一张差旅费报销单从「选票据」做到「保存草稿 + 复核卡」。
+
+- **页面**：`public/index.html` 的 `[data-section="reimburse"]` 段（外观映射到本应用 token，浅色/深色跟随）
+- **干活的仍是技能自己**：页面只做交互，真正执行的是技能自带的 `web/server.mjs` + `runner/`
+- **接线**：Rust 只做两件事 —— 起/停 `web/server.mjs`，并把 `/api/reimburse/*` **反向代理**给它
+  （对页面同源 `127.0.0.1:8766`，因此**不必**给 `server.mjs` 加 CORS，技能目录一行未改）
+- **实时日志**：SSE 经反代**边收边发**（实测 81 个事件在 1.6s 内分散到达，非攒完一次性下发）
+- **技能红线原样保留**：只填不提交（页面无「提交」入口）、金额一律不碰、写入白名单 4 列
+  —— 全部由 `server.mjs` 的命令白名单与路径限制强制，本应用不复制这套逻辑
+
 ### 鲸鱼娘桌面宠物（pet / petmenu / net 三个透明窗）
 - 素材：`whale-refined` 雪碧图（1536×1872 = 8 列 × 9 行，cell 192×208）
 - 动画轨道：idle / running-right / running-left / waving / jumping / failed / waiting / running / review
@@ -35,6 +48,8 @@
 - `pet-engine-test.cjs` 宠物动作引擎离线测试（DOM 桩）
 - `net-fmt-test.cjs` 网速显示口径离线测试
 - `preview.cjs` 无头预览（生成 `preview-*.png`，用于免启动看气泡样式）
+- `rc-ui-smoke.mjs` 报销操作台栏目端到端冒烟（导航/反代/目录浏览/红线守卫/老栏目回归）
+  —— 需应用正在运行；借用技能目录里的 playwright（路径由 `reimburse.json` 的 `skillRoot` 推出）
 
 ---
 
@@ -48,6 +63,8 @@ agent-console.exe (Tauri v2)
 │            /api/backup  /api/restore  /api/windows  /api/usage  /api/dshbalance
 │            /api/openurl  /api/pet/toggle  /api/pet/drag  /api/pet/geom
 │            /api/main/show  /api/quit
+│            /api/reimburse/service   报销操作台服务 起/停/查
+│            /api/reimburse/*         → 反代 127.0.0.1:8790（含 SSE 流式日志）
 ├─ 窗口（前端全部经 http://127.0.0.1:8766/*.html 加载，运行时读盘 + no-store）
 │   main    1280×840   普通窗口
 │   pet     204×280    transparent / alwaysOnTop / skipTaskbar / resizable:false / focus:false / decorations:false
@@ -83,6 +100,7 @@ agent-console/
 ├─ devtools/                          离线测试与预览工具
 ├─ agents.json                        智能体配置（增删智能体只改这里）
 ├─ net-bubble.json                    网速气泡配置（enable / gapLp）
+├─ reimburse.json                     报销操作台接线（skillRoot / port / node）
 ├─ state.json                         任务数据
 ├─ restart.cmd                        优雅重启（quit → 等端口释放 → 拉起）
 ├─ server.js / win.ps1                旧的 Node 桥接形态（保留，桌面版不依赖）
@@ -129,6 +147,7 @@ curl -X POST http://127.0.0.1:8766/api/quit
 | `public/pet.json` | 宠物雪碧图清单（帧数/时长/轨道） | 2 秒热重载 |
 | `public/pet-behavior.json` | 动作与行为清单（左键三通道、闲置动作、台词） | 2 秒热重载 |
 | `net-bubble.json` | 网速气泡开关与间距 | 2 秒热重载 |
+| `reimburse.json` | 报销操作台接线：`skillRoot`（技能目录）/ `port`（默认 8790）/ `node`（留空用 PATH） | 每次调用回读，即时生效 |
 
 ---
 
