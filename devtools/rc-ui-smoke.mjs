@@ -115,7 +115,64 @@ try {
   await page.screenshot({ path: SHOT });
   console.log('  截图 → ' + SHOT);
 
-  console.log('=== 9. 控制台 / 网络 ===');
+  console.log('=== 9. 界面结构（流程轨 / 面板 / 深色终端）===');
+  ok(await page.locator('.rc-rail-item').count() === 5, '流程轨 5 步');
+  ok(await page.locator('.rc-panel').count() >= 8, '面板数 ' + await page.locator('.rc-panel').count());
+  await page.locator('.rc-rail-item').nth(1).click();
+  await page.waitForTimeout(500);
+  ok(await page.locator('.rc-rail-item').nth(1).evaluate((e) => e.classList.contains('active')), '点流程轨能定位到对应步骤');
+  // 深色终端必须是深底浅字 —— 「拿 --ink-deep 当背景」会在深色主题下变白底白字
+  const cInLight = await page.locator('.rc-console').evaluate((e) => getComputedStyle(e).backgroundColor);
+  const lum = (rgb) => { const m = rgb.match(/\d+/g); return m ? (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 : 1; };
+  ok(lum(cInLight) < 0.35, `浅色主题下日志底是深的（${cInLight}）`);
+
+  console.log('=== 10. 深色主题下的终端与代码条（既有 bug 回归守卫）===');
+  await page.evaluate(() => { try { localStorage.setItem('wb_agent_console_theme', 'dark'); } catch (e) { } });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('[data-target="reimburse"]').first().click();
+  await page.waitForTimeout(1800);
+  const dm = await page.evaluate(() => {
+    const con = document.querySelector('.rc-console');
+    const bar = document.querySelector('.code-bar');
+    return {
+      consoleBg: getComputedStyle(con).backgroundColor,
+      barBg: bar ? getComputedStyle(bar).backgroundColor : null,
+      barFg: bar ? getComputedStyle(bar).color : null,
+    };
+  });
+  ok(lum(dm.consoleBg) < 0.35, `深色主题下日志底仍是深的（${dm.consoleBg}）`);
+  if (dm.barBg) ok(lum(dm.barBg) < 0.35 && lum(dm.barFg) > 0.7,
+    `插件舱 .code-bar 深底浅字（底 ${dm.barBg} / 字 ${dm.barFg}）`);
+  await page.evaluate(() => { try { localStorage.setItem('wb_agent_console_theme', 'light'); } catch (e) { } });
+
+  console.log('=== 11. 窄屏（移动底栏 5 列 / 不横向溢出）===');
+  await page.setViewportSize({ width: 400, height: 900 });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+  const mnav = await page.evaluate(() => {
+    const nav = document.getElementById('mobile-nav');
+    return {
+      cols: getComputedStyle(nav).gridTemplateColumns.split(' ').length,
+      items: nav.querySelectorAll('[data-target]').length,
+    };
+  });
+  ok(mnav.items === mnav.cols, `移动底栏 ${mnav.items} 项 = ${mnav.cols} 列（加栏目必须同步改列数）`);
+  await page.locator('#mobile-nav [data-target="reimburse"]').click();
+  await page.waitForTimeout(900);
+  ok(await page.locator('[data-section="reimburse"]').isVisible(), '窄屏下能从底栏进入报销操作台');
+  // 只断言「本栏目自身」不溢出：≤410px 时整页会被主界面顶栏的 .theme-button 顶宽，
+  // 那在任何栏目都存在（既有问题，与本栏目无关），别让它把这里的回归测红。
+  const ovf = await page.evaluate(() => {
+    const r = document.querySelector('.rc-root');
+    return r.scrollWidth - r.clientWidth;
+  });
+  ok(ovf <= 2, `报销栏自身无横向溢出（${ovf}px）`);
+  await page.setViewportSize({ width: 430, height: 900 });
+  await page.waitForTimeout(500);
+  const pageOvf = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  ok(pageOvf <= 2, `≥430px 整页无横向溢出（${pageOvf}px）`);
+
+  console.log('=== 12. 控制台 / 网络 ===');
   ok(errs.length === 0, errs.length ? '控制台错误：' + errs.slice(0, 5).join(' | ') : '无 JS 错误');
   ok(failedReq.length === 0, failedReq.length ? '失败请求：' + failedReq.slice(0, 5).join(' | ') : '无失败请求');
 } finally {

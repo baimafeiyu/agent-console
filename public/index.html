@@ -36,6 +36,9 @@
     --radius: 22px;
     --control-radius: 14px;
     --sidebar: 256px;
+    /* 「深色终端」底色。不能拿 --ink-deep 当背景：深色主题下那个 token 会翻成近白色，
+       白底白字直接看不见（插件舱 .code-bar 就踩了这个坑）。终端在两种主题下都该是深的。 */
+    --terminal: #163b3d;
   }
   html[data-theme="dark"] {
     color-scheme: dark;
@@ -64,6 +67,7 @@
     --sun-pale: #4a3c20;
     --shadow: 0 1px 0 rgba(255,255,255,.025), 0 8px 24px rgba(0,0,0,.16);
     --shadow-soft: 0 4px 14px rgba(0,0,0,.15);
+    --terminal: #0e1a19;
   }
   * { box-sizing: border-box; }
   body {
@@ -319,7 +323,7 @@
   .chip{padding:4px 11px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface-soft);
     font-size:12px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
   .code-bar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;border-radius:12px;
-    background:var(--ink-deep);color:#e8f4ee;font-family:Consolas,"Courier New",monospace;font-size:13px}
+    background:var(--terminal);color:#e8f4ee;font-family:Consolas,"Courier New",monospace;font-size:13px}
   .code-bar button{padding:6px 12px;min-height:34px;font-size:12.5px;color:#e8f4ee;
     border-color:transparent;background:color-mix(in srgb,#fffaf3 12%,transparent)}
   .spacer{flex:1}
@@ -337,7 +341,7 @@
 
   /* ---------- 移动底栏 / toast ---------- */
   .mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:30;display:grid;
-    grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));
+    grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));
     border-top:1px solid var(--line-strong);background:color-mix(in srgb,var(--surface-raised) 96%,transparent)}
   .mobile-nav button{display:grid;place-items:center;align-content:center;gap:2px;min-width:0;min-height:52px;
     padding:5px 2px;border-color:transparent;border-radius:10px;background:transparent;font-size:11px}
@@ -420,116 +424,218 @@
   }
 
   /* ════════════ 差旅费报销操作台 ════════════
-     移植自 oa-reimburse-draft/web/index.html：结构与交互原样保留，
-     只把配色映射到本应用的 token（浅色/深色跟随 data-theme），
-     并把主界面那套「大按钮/48px 输入框」的全局规则在 .rc-root 内复位成紧凑形态。 */
+     结构与交互移植自技能 oa-reimburse-draft 的 web/index.html，
+     外观改用本应用自己的设计语言：panel / sticker / icon-base / form-hint / code-bar，
+     配色全部走 token（浅色 + 深色两套跟随 data-theme）。
+     ⚠️ 所有 rc-* 类名与元素 id 都被 JS 依赖，改美术可以，改名字要先改 JS。 */
   .rc-root{
-    --rc-panel:var(--surface);
-    --rc-panel2:var(--surface-soft);
-    --rc-line:var(--line);
-    --rc-txt:var(--ink-deep);
+    /* 只留真正用到的两个；配色一律直接用主界面 token，少一层间接就少一处对不上 */
     --rc-dim:var(--muted);
-    --rc-acc:var(--blue);
-    --rc-ok:var(--positive);
-    --rc-warn:var(--warning);
-    --rc-bad:var(--danger);
-    --rc-chip:var(--surface-soft);
     --rc-mono:ui-monospace,Consolas,"Cascadia Mono",monospace;
   }
-  .rc-root button{min-height:0;height:auto;padding:6px 12px;font-size:13px;line-height:1.4;
-    border:1px solid var(--rc-line);border-radius:10px;background:var(--rc-panel);color:var(--rc-txt);
-    transform:none;transition:border-color 140ms ease,background 140ms ease}
-  .rc-root button:hover{border-color:var(--rc-acc);background:var(--rc-panel2);transform:none}
+  /* 主界面那套「大按钮 / 48px 输入框」的全局规则是给指挥舱用的，这里复位成紧凑形态 */
+  .rc-root button{min-height:0;height:auto;padding:7px 13px;font-size:13px;line-height:1.4;font-weight:600;
+    border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);color:var(--ink-deep);
+    transform:none;transition:border-color 150ms ease,background 150ms ease,box-shadow 150ms ease}
+  .rc-root button:hover{border-color:var(--positive);background:var(--surface-raised);transform:none;
+    box-shadow:0 3px 10px rgba(22,59,61,.07)}
   .rc-root button:active{transform:none}
-  .rc-root input,.rc-root select{width:100%;height:auto;min-height:0;padding:6px 9px;font-size:13px;
-    border:1px solid var(--rc-line);border-radius:10px;background:var(--rc-panel);color:var(--rc-txt)}
-  .rc-root textarea{width:100%;min-height:60px;padding:6px 9px;font-size:13px;border:1px solid var(--rc-line);
-    border-radius:10px;background:var(--rc-panel);color:var(--rc-txt);resize:vertical}
-  .rc-root input[type=checkbox],.rc-root input[type=radio]{width:auto;height:auto;min-height:0;padding:0}
-  .rc-root label{display:block;font-size:12px;color:var(--rc-dim);margin:8px 0 3px}
-  .rc-root label.rc-inline{display:flex;align-items:center;gap:6px;margin:0}
-  .rc-root a{color:var(--rc-acc)}
-  .rc-root h2{font-size:15px;margin:0 0 10px;color:var(--rc-txt)}
-  .rc-root code{font:12px var(--rc-mono);background:var(--rc-chip);border:1px solid var(--rc-line);
-    border-radius:5px;padding:0 4px}
+  .rc-root input,.rc-root select{width:100%;height:auto;min-height:0;padding:8px 10px;font-size:13.5px;
+    border:1px solid var(--line-strong);border-radius:12px;background:var(--surface-raised);color:var(--ink-deep)}
+  .rc-root input:focus,.rc-root select:focus,.rc-root textarea:focus{border-color:var(--positive);outline:none}
+  .rc-root textarea{width:100%;min-height:60px;padding:8px 10px;font-size:13.5px;border:1px solid var(--line-strong);
+    border-radius:12px;background:var(--surface-raised);color:var(--ink-deep);resize:vertical}
+  .rc-root input[type=checkbox],.rc-root input[type=radio]{width:auto;height:auto;min-height:0;padding:0;
+    accent-color:var(--positive)}
+  .rc-root label{display:block;font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--muted);margin:10px 0 4px}
+  .rc-root label.rc-inline{display:flex;align-items:center;gap:7px;margin:0;padding:7px 11px;
+    border:1px dashed var(--line-strong);border-radius:12px;background:var(--surface-raised);
+    font-weight:600;color:var(--ink);cursor:pointer;transition:border-color 150ms ease,background 150ms ease}
+  .rc-root label.rc-inline:hover{border-color:var(--positive);background:var(--surface)}
+  .rc-root a{color:var(--positive-strong);font-weight:600}
+  .rc-root code{font:12px var(--rc-mono);background:var(--surface-soft);border:1px solid var(--line);
+    border-radius:6px;padding:1px 5px}
   .rc-muted{color:var(--rc-dim)}
   .rc-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  .rc-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .rc-three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-  .rc-sep{height:1px;background:var(--rc-line);margin:12px 0}
-  .rc-hint{font-size:11.5px;color:var(--rc-dim);margin-top:3px}
+  .rc-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .rc-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  /* 窄屏防溢出：grid/flex 子项默认不肯缩到 min-content 以下，长下拉（如「脚本逐张上传（推荐；受发票池状态影响）」）
+     会把整页撑宽。显式给 min-width:0，再在手机宽度把两列/三列摊成一列。 */
+  .rc-root input,.rc-root select,.rc-root textarea{min-width:0}
+  .rc-two>div,.rc-three>div,.rc-row>*{min-width:0}
+  @media (max-width:560px){
+    .rc-two,.rc-three{grid-template-columns:1fr}
+    .rc-heading{flex-direction:column;align-items:stretch}
+    .rc-svc{justify-content:space-between}
+  }
+  .rc-sep{height:1px;background:var(--line);margin:14px 0}
+  .rc-hint{font-size:11.5px;line-height:1.55;color:var(--rc-dim);margin-top:5px}
+  .rc-hint b{color:var(--ink)}
 
-  .rc-head{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
-  .rc-head h2{font-size:1.35rem;margin:0}
-  .rc-head p{margin:2px 0 0;color:var(--rc-dim);font-size:13px}
-  .rc-chips{display:flex;flex-wrap:wrap;gap:6px}
-  .rc-chip{background:var(--rc-chip);border:1px solid var(--rc-line);border-radius:999px;
-    padding:2px 10px;font-size:12px;color:var(--rc-dim)}
-  .rc-chip b{color:var(--rc-txt);font-weight:600}
-  .rc-chip.ok{border-color:var(--rc-ok);color:var(--rc-ok)}
-  .rc-chip.warn{border-color:var(--rc-warn);color:var(--rc-warn)}
-  .rc-chip.bad{border-color:var(--rc-bad);color:var(--rc-bad)}
-  .rc-redline{background:var(--rc-bad);border:1px solid var(--rc-bad);border-radius:12px;padding:8px 12px;
-    font-size:12.5px;color:#fff;margin-bottom:12px;opacity:.92}
-  .rc-redline b{color:#fff}
-  .rc-banner{border-radius:12px;padding:10px 12px;margin:10px 0;font-size:13px;
-    border:1px solid var(--rc-line);background:var(--rc-panel2);color:var(--rc-txt)}
-  .rc-banner.ok{border-color:var(--rc-ok);color:var(--rc-ok)}
-  .rc-banner.warn{border-color:var(--rc-warn);color:var(--rc-warn)}
-  .rc-banner.bad{border-color:var(--rc-bad);color:var(--rc-bad)}
+  /* ---------- 页头 / 服务状态 ---------- */
+  .rc-heading{align-items:flex-start;margin:0 0 16px}
+  .rc-heading h2{margin:0;font-size:clamp(1.6rem,3vw,2rem);font-weight:650;letter-spacing:-.035em;line-height:1.16}
+  .rc-heading p{max-width:62ch;margin:7px 0 0;color:var(--muted);font-size:14px}
+  .rc-svc{display:flex;flex:0 0 auto;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 12px;
+    border:1px solid var(--line-strong);border-radius:16px;background:var(--surface);box-shadow:var(--shadow-soft)}
 
-  .rc-grid{display:grid;grid-template-columns:minmax(360px,1fr) minmax(400px,1.25fr);gap:14px;align-items:start}
+  .rc-chips{display:flex;flex-wrap:wrap;gap:7px}
+  .rc-chip{padding:4px 11px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface-soft);
+    font-size:12px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rc-chip b{color:var(--ink-deep);font-weight:750}
+  .rc-chip.ok{border-color:var(--positive);background:var(--positive-pale);color:var(--positive-strong)}
+  .rc-chip.ok b{color:var(--positive-strong)}
+  .rc-chip.warn{border-color:var(--sun);background:var(--sun-pale);color:var(--warning)}
+  .rc-chip.warn b{color:var(--warning)}
+  .rc-chip.bad{border-color:var(--danger);background:var(--danger-pale);color:var(--danger)}
+  .rc-chip.bad b{color:var(--danger)}
+
+  /* ---------- 环境条 ---------- */
+  .rc-envbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+    margin-bottom:14px;padding:11px 14px;border:1px dashed var(--line-strong);border-radius:16px;
+    background:color-mix(in srgb,var(--surface-raised) 72%,transparent)}
+  .rc-tools{display:flex;flex-wrap:wrap;gap:6px}
+  .rc-tools button{padding:6px 11px;font-size:12.5px}
+
+  /* ---------- 红线：不是报错，是规矩 —— 做成安静但绕不过去的提示条 ---------- */
+  .rc-redline{display:flex;gap:11px;align-items:flex-start;margin-bottom:16px;padding:12px 15px;
+    border:1px solid color-mix(in srgb,var(--danger) 40%,var(--line));border-left:4px solid var(--danger);
+    border-radius:16px;background:var(--danger-pale);color:var(--ink-deep);font-size:13px;line-height:1.6}
+  .rc-redline>.app-icon{flex:none;width:19px;height:19px;margin-top:2px;color:var(--danger)}
+  .rc-redline b{color:var(--danger);font-weight:750}
+
+  /* ---------- 流程轨：把 ①→⑤ 的先后关系明说出来 ---------- */
+  .rc-rail{display:flex;flex-wrap:wrap;margin:0 0 18px;padding:0;list-style:none;overflow:hidden;
+    border:1px solid var(--line-strong);border-radius:16px;background:var(--surface);box-shadow:var(--shadow-soft)}
+  .rc-rail-item{display:flex;flex:1 1 150px;align-items:center;gap:9px;padding:10px 14px;cursor:pointer;
+    border-left:1px dashed var(--line);color:var(--muted);font-size:13px;font-weight:650;
+    transition:background 150ms ease,color 150ms ease}
+  .rc-rail-item:first-child{border-left:0}
+  .rc-rail-item:hover{background:var(--surface-soft);color:var(--ink-deep)}
+  .rc-rail-no{display:grid;place-items:center;flex:none;width:25px;height:25px;border-radius:9px;
+    border:1px solid var(--line-strong);background:var(--surface-soft);color:var(--muted);font-size:12px;font-weight:750}
+  .rc-rail-item.active{background:var(--positive-pale);color:var(--ink-deep)}
+  .rc-rail-item.active .rc-rail-no{border-color:var(--positive-strong);background:var(--positive-strong);color:#fffaf3}
+  .rc-rail-item.done .rc-rail-no{border-color:var(--positive);background:var(--positive-pale);color:var(--positive-strong)}
+  .rc-rail-item.done .rc-rail-no em{display:none}
+  .rc-rail-item.done .rc-rail-no::after{content:"✓"}
+
+  /* ---------- 面板：沿用主界面 .panel / .sticker 语言 ---------- */
+  .rc-grid{display:grid;grid-template-columns:minmax(340px,1fr) minmax(400px,1.2fr);gap:16px;align-items:start}
   @media (max-width:1080px){.rc-grid{grid-template-columns:1fr}}
-  .rc-card{background:var(--rc-panel);border:1px solid var(--rc-line);border-radius:var(--radius);
-    padding:16px;margin-bottom:14px;box-shadow:var(--shadow-soft)}
-  .rc-card.flat{background:var(--rc-panel2)}
-  .rc-btn.primary{background:var(--positive-strong);border-color:var(--positive-strong);color:#fffaf3}
-  .rc-btn.ok{background:var(--rc-ok);border-color:var(--rc-ok);color:#fff}
-  .rc-btn.warn{background:var(--rc-warn);border-color:var(--rc-warn);color:#fff}
-  .rc-btn.bad{background:var(--rc-bad);border-color:var(--rc-bad);color:#fff}
-  .rc-btn:disabled{opacity:.45;cursor:not-allowed}
-  .rc-btn.sm{padding:3px 9px;font-size:12px}
+  .rc-col{display:grid;gap:16px;min-width:0}
+  .rc-panel{padding:18px;margin:0;scroll-margin-top:16px}
+  .rc-panel-head{display:flex;align-items:center;gap:11px;margin-bottom:14px}
+  .rc-panel-head .icon-base{flex:none;color:var(--positive-strong);background:var(--positive-pale)}
+  .rc-panel-head .icon-base.rc-icon-info{color:var(--blue);
+    background:color-mix(in srgb,var(--blue) 15%,var(--surface))}
+  .rc-panel-head .icon-base.rc-icon-warn{color:var(--warning);background:var(--sun-pale)}
+  .rc-panel-head h3{margin:0;font-size:17px;line-height:1.25}
+  .rc-panel-kicker{margin-bottom:1px;color:var(--muted);font-size:11px;font-weight:750;letter-spacing:.08em}
+  /* 表单分组标题：自带分隔线，不必额外包一层 div（少一层嵌套就少一处出错） */
+  .rc-sub-head{display:flex;align-items:center;gap:7px;margin:18px 0 0;padding-top:14px;
+    border-top:1px dashed var(--line);color:var(--ink);font-size:12.5px;font-weight:750;letter-spacing:.02em}
+  .rc-sub-head .app-icon{width:15px;height:15px;color:var(--positive)}
+  .rc-panel-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:16px;
+    padding-top:14px;border-top:1px dashed var(--line)}
 
-  .rc-steps{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
-  .rc-step{font:12px var(--rc-mono);background:var(--rc-chip);border:1px solid var(--rc-line);
-    border-radius:6px;padding:1px 7px;color:var(--rc-dim)}
-  .rc-step.run{border-color:var(--rc-acc);color:var(--rc-acc)}
-  .rc-step.ok{border-color:var(--rc-ok);color:var(--rc-ok)}
-  .rc-step.bad{border-color:var(--rc-bad);color:var(--rc-bad)}
+  .rc-btn.primary{background:var(--positive-strong);border-color:var(--positive-strong);color:#fffaf3;
+    box-shadow:0 4px 12px color-mix(in srgb,var(--positive) 26%,transparent)}
+  .rc-btn.ok{background:var(--positive-strong);border-color:var(--positive-strong);color:#fffaf3}
+  .rc-btn.warn{background:var(--sun-pale);border-color:var(--sun);color:var(--warning)}
+  .rc-btn.bad{background:var(--danger-pale);border-color:var(--danger);color:var(--danger)}
+  .rc-btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+  .rc-btn.sm{padding:5px 10px;font-size:12px;border-radius:11px}
+  .rc-banner{margin:12px 0;padding:11px 14px;border:1px solid var(--line-strong);border-radius:14px;
+    background:var(--surface-raised);color:var(--ink);font-size:13px;line-height:1.6}
+  .rc-banner.ok{border-color:var(--positive);background:var(--positive-pale);color:var(--positive-strong)}
+  .rc-banner.warn{border-color:var(--sun);background:var(--sun-pale);color:var(--warning)}
+  .rc-banner.bad{border-color:var(--danger);background:var(--danger-pale);color:var(--danger)}
 
-  .rc-log{background:var(--surface-raised);border:1px solid var(--rc-line);border-radius:12px;padding:10px;
-    height:320px;overflow:auto;font:12px/1.5 var(--rc-mono);white-space:pre-wrap;word-break:break-word;color:var(--rc-txt)}
-  .rc-log .l-ok{color:var(--rc-ok)}.rc-log .l-bad{color:var(--rc-bad)}
-  .rc-log .l-warn{color:var(--rc-warn)}.rc-log .l-step{color:var(--rc-acc);font-weight:600}
+  /* ---------- 执行步骤徽章（S1–S9）---------- */
+  .rc-steps{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 0}
+  .rc-step{font:700 11.5px var(--rc-mono);padding:3px 9px;border:1px solid var(--line-strong);
+    border-radius:8px;background:var(--surface-soft);color:var(--muted)}
+  .rc-step.run{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 13%,var(--surface));color:var(--blue)}
+  .rc-step.ok{border-color:var(--positive);background:var(--positive-pale);color:var(--positive-strong)}
+  .rc-step.bad{border-color:var(--danger);background:var(--danger-pale);color:var(--danger)}
 
-  .rc-root table{width:100%;border-collapse:collapse;font-size:12.5px}
-  .rc-root th,.rc-root td{border-bottom:1px solid var(--rc-line);padding:5px 6px;text-align:left;vertical-align:top}
-  .rc-root th{color:var(--rc-dim);font-weight:500}
-  .rc-dirlist{max-height:240px;overflow:auto;border:1px solid var(--rc-line);border-radius:10px;
-    padding:6px;background:var(--rc-panel)}
-  /* 附件行：栅格两行 —— 第一行「标签 + 文件名 + 大小」，第二行整宽的下拉。
-     主界面这一栏比操作台独立页窄，flex 排会把文件名挤成三行，所以改成栅格。 */
-  .rc-file{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 8px;
-    align-items:center;padding:4px;border-radius:8px}
-  .rc-file>:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* ---------- 日志：固定用「深色终端」，浅色/深色主题下都保持同一块深底 ---------- */
+  .rc-console{margin-top:14px;border-radius:16px;overflow:hidden;background:var(--terminal);
+    box-shadow:inset 0 0 0 1px rgba(255,250,243,.1)}
+  .rc-console-bar{display:flex;align-items:center;gap:9px;padding:9px 13px;
+    border-bottom:1px solid rgba(255,250,243,.12)}
+  .rc-console-dot{flex:none;width:9px;height:9px;border-radius:50%;background:#8fa8a1;
+    transition:background 200ms ease,box-shadow 200ms ease}
+  .rc-console-dot.live{background:#5fd0a8;box-shadow:0 0 0 3px rgba(95,208,168,.22)}
+  .rc-console-dot.err{background:#ff958d;box-shadow:0 0 0 3px rgba(255,149,141,.2)}
+  .rc-console-title{color:#cfe3dc;font-size:12px;font-weight:700;letter-spacing:.02em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rc-console-bar .rc-tools{margin-left:auto;flex:none}
+  .rc-console-bar button{min-height:28px;padding:3px 10px;font-size:11.5px;color:#e8f4ee;
+    border-color:transparent;background:color-mix(in srgb,#fffaf3 12%,transparent)}
+  .rc-console-bar button:hover{background:color-mix(in srgb,#fffaf3 21%,transparent);
+    border-color:transparent;box-shadow:none}
+  .rc-log{height:330px;overflow:auto;padding:12px 14px;color:#dcece6;
+    font:12px/1.65 var(--rc-mono);white-space:pre-wrap;word-break:break-word}
+  .rc-log:empty::before{content:"（点上面的按钮开始）";color:#7d968f}
+  .rc-log .l-ok{color:#8ce0bd}.rc-log .l-bad{color:#ffb0a9}
+  .rc-log .l-warn{color:#f5d68f}.rc-log .l-step{color:#9fd0ff;font-weight:700}
+
+  /* ---------- 目录 / 附件归类 ---------- */
+  .rc-dirlist{max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:14px;
+    padding:7px;background:var(--surface-raised)}
+  .rc-navrow{padding:2px 3px}
+  .rc-root .rc-dirlist button{width:100%;padding:6px 10px;font-size:12.5px;text-align:left;
+    border-color:transparent;background:transparent;box-shadow:none}
+  .rc-root .rc-dirlist button:hover{border-color:var(--line);background:var(--surface-soft);box-shadow:none}
+  /* 附件行两行栅格：第一行「标签 + 文件名 + 大小」，第二行整宽的文件夹下拉。
+     主界面这一栏比操作台独立页窄，flex 排会把文件名挤成三行。 */
+  .rc-file{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 9px;
+    align-items:center;padding:6px;border-radius:10px;border-top:1px dashed var(--line)}
+  .rc-file:first-child{border-top:0}
+  .rc-file>:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
   .rc-file>:nth-child(3){font-size:11px;color:var(--rc-dim);text-align:right;white-space:nowrap}
-  .rc-file>select{grid-column:1/-1;width:100%}
-  .rc-file:hover{background:var(--rc-panel2)}
-  .rc-navrow{padding:2px 4px}
-  .rc-tag{font-size:11px;border-radius:999px;padding:0 8px;border:1px solid var(--rc-line);color:var(--rc-dim);white-space:nowrap}
-  .rc-tag.f-invoice{border-color:var(--rc-warn);color:var(--rc-warn)}
-  .rc-tag.f-other{border-color:var(--rc-acc);color:var(--rc-acc)}
-  .rc-tag.f-bad{border-color:var(--rc-bad);color:var(--rc-bad)}
-  .rc-root details{border:1px solid var(--rc-line);border-radius:12px;padding:8px 12px;
-    background:var(--rc-panel2);margin-bottom:8px}
-  .rc-root summary{cursor:pointer;font-weight:600;font-size:13px}
-  .rc-kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:13px}
-  .rc-kv div:nth-child(odd){color:var(--rc-dim)}
-  .rc-toast{position:fixed;right:16px;bottom:16px;background:var(--rc-panel);border:1px solid var(--rc-line);
-    border-left:3px solid var(--rc-acc);border-radius:12px;padding:10px 14px;max-width:420px;z-index:60;
-    box-shadow:var(--shadow);font-size:13px;color:var(--rc-txt)}
-  .rc-toast.bad{border-left-color:var(--rc-bad)}
-  .rc-toast.ok{border-left-color:var(--rc-ok)}
+  .rc-file>select{grid-column:1/-1;width:100%;padding:5px 8px;font-size:12px}
+  .rc-file:hover{background:var(--surface-soft)}
+  .rc-tag{font-size:11px;font-weight:650;border-radius:999px;padding:1px 9px;border:1px solid var(--line-strong);
+    background:var(--surface-soft);color:var(--muted);white-space:nowrap}
+  .rc-tag.f-invoice{border-color:var(--sun);background:var(--sun-pale);color:var(--warning)}
+  .rc-tag.f-other{border-color:color-mix(in srgb,var(--blue) 55%,var(--line));
+    background:color-mix(in srgb,var(--blue) 13%,var(--surface));color:var(--blue)}
+  .rc-tag.f-bad{border-color:var(--danger);background:var(--danger-pale);color:var(--danger)}
+
+  /* ---------- 表格 / 键值 / 折叠 ---------- */
+  .rc-history{margin-top:16px}
+  .rc-tablewrap{overflow-x:auto}
+  .rc-root table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rc-root th{padding:9px 10px;border-bottom:1px solid var(--line-strong);color:var(--muted);
+    font-size:11.5px;font-weight:750;letter-spacing:.03em;text-align:left;white-space:nowrap}
+  .rc-root td{padding:11px 10px;border-bottom:1px dashed var(--line);text-align:left;vertical-align:middle}
+  .rc-root tbody tr{transition:background 140ms ease}
+  .rc-root tbody tr:hover{background:var(--surface-soft)}
+  .rc-root tbody tr:last-child td{border-bottom:0}
+  .rc-amount{font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rc-billno{font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .rc-empty{padding:24px 14px;text-align:center;color:var(--muted);font-size:13px;
+    border:1px dashed var(--line-strong);border-radius:14px;background:var(--surface-raised)}
+  .rc-kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px 16px;margin-top:12px;font-size:13px}
+  .rc-kv>div:nth-child(odd){color:var(--muted);font-weight:600;white-space:nowrap}
+  .rc-kv>div:nth-child(even){color:var(--ink-deep);overflow-wrap:anywhere}
+
+  .rc-root details{border:1px solid var(--line);border-radius:14px;padding:10px 14px;
+    background:var(--surface-raised);margin-bottom:8px;transition:border-color 150ms ease,background 150ms ease}
+  .rc-root details:hover{border-color:var(--line-strong)}
+  .rc-root details[open]{border-color:var(--line-strong);background:var(--surface-soft)}
+  .rc-root summary{cursor:pointer;font-weight:700;font-size:13px}
+  .rc-root summary::marker{color:var(--positive)}
+
+  /* ---------- 消息气泡 ---------- */
+  .rc-toast{position:fixed;right:18px;bottom:18px;z-index:60;max-width:420px;padding:12px 16px;
+    border:1px solid var(--line-strong);border-left:4px solid var(--positive);border-radius:14px;
+    background:var(--surface);color:var(--ink-deep);font-size:13px;box-shadow:var(--shadow)}
+  .rc-toast.bad{border-left-color:var(--danger)}
+  .rc-toast.ok{border-left-color:var(--positive)}
 </style>
 </head>
 <body>
@@ -562,6 +668,7 @@
   <symbol id="i-empty" viewBox="0 0 24 24"><path d="M4.5 7.5 6.8 4h10.4l2.3 3.5M4.5 7.5h15V20h-15zM9.5 12h5"/></symbol>
   <symbol id="i-plugin" viewBox="0 0 24 24"><path d="M9 3v4m6-4v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></symbol>
   <symbol id="i-reimburse" viewBox="0 0 24 24"><path d="M5 3.5h9l5 5v12H5z"/><path d="M14 3.5v5h5"/><path d="M8.5 13h7M8.5 16.5h4.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.7l2 2.2h7.3A2.5 2.5 0 0 1 21 9.7v7.8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
 </svg>
 
 <div class="app-shell">
@@ -794,31 +901,49 @@
       <section class="page-section" data-section="reimburse" aria-labelledby="rc-title">
         <div class="rc-root" id="rcRoot">
 
-          <div class="rc-head">
+          <div class="section-heading rc-heading">
             <div>
               <h2 id="rc-title">差旅费报销操作台</h2>
-              <p>OA 财务系统 · 只填不提交 · 从「选票据」做到「保存草稿 + 复核卡」</p>
+              <p>在 OA 财务系统里把一张差旅费报销单，从「选票据」一路做到「保存草稿 + 复核卡」。机器抽事实，你写判断。</p>
             </div>
+            <div class="rc-svc">
+              <span class="rc-chip" id="rcSvcChip">服务状态未知</span>
+              <button class="rc-btn sm" type="button" onclick="RC.svcToggle()" id="rcSvcBtn">启动服务</button>
+            </div>
+          </div>
+
+          <div class="rc-envbar">
             <div class="rc-chips" id="envChips"><span class="rc-chip">加载中…</span></div>
+            <div class="rc-tools">
+              <button class="rc-btn" type="button" onclick="RC.exec('setup')">环境自检</button>
+              <button class="rc-btn" type="button" onclick="RC.exec('login')">登录 OA</button>
+              <button class="rc-btn" type="button" onclick="RC.exec('login-list')">登录态体检</button>
+              <button class="rc-btn" type="button" onclick="RC.exec('preflight')">只读探测</button>
+              <button class="rc-btn" type="button" onclick="RC.exec('selftest',{fast:true})">离线自检</button>
+            </div>
           </div>
 
-          <div class="rc-row" style="margin-bottom:10px">
-            <span class="rc-chip" id="rcSvcChip">服务状态未知</span>
-            <button class="rc-btn sm" type="button" onclick="RC.svcToggle()" id="rcSvcBtn">启动服务</button>
-            <button class="rc-btn sm" type="button" onclick="RC.exec('setup')">环境自检</button>
-            <button class="rc-btn sm" type="button" onclick="RC.exec('login')">登录 OA</button>
-            <button class="rc-btn sm" type="button" onclick="RC.exec('login-list')">登录态体检</button>
-            <button class="rc-btn sm" type="button" onclick="RC.exec('preflight')">只读探测</button>
-            <button class="rc-btn sm" type="button" onclick="RC.exec('selftest',{fast:true})">离线自检</button>
+          <div class="rc-redline">
+            <svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-alert"/></svg>
+            <div id="redline">红线：<b>只填不提交</b> · 写入白名单只有 4 列 · <b>金额一律不碰</b>（系统从发票自动录入） · 保存草稿后由<b>你本人</b>去 OA 点提交</div>
           </div>
 
-          <div class="rc-redline" id="redline">红线：<b>只填不提交</b> · 写入白名单只有 4 列 · <b>金额一律不碰</b>（系统从发票自动录入） · 保存草稿后由<b>你本人</b>去 OA 点提交</div>
+          <ol class="rc-rail" id="rcRail" aria-label="操作台流程">
+            <li class="rc-rail-item" data-rc-goto="rc-step-1"><span class="rc-rail-no"><em>1</em></span><span>选票据目录</span></li>
+            <li class="rc-rail-item" data-rc-goto="rc-step-2"><span class="rc-rail-no"><em>2</em></span><span>填人工判断</span></li>
+            <li class="rc-rail-item" data-rc-goto="rc-step-3"><span class="rc-rail-no"><em>3</em></span><span>核对摘要</span></li>
+            <li class="rc-rail-item" data-rc-goto="rc-step-4"><span class="rc-rail-no"><em>4</em></span><span>执行建单</span></li>
+            <li class="rc-rail-item" data-rc-goto="rc-step-5"><span class="rc-rail-no"><em>5</em></span><span>复核交付</span></li>
+          </ol>
 
           <div class="rc-grid">
             <!-- ============ 左：向导 ============ -->
-            <div>
-              <div class="rc-card">
-                <h2>① 选票据目录</h2>
+            <div class="rc-col">
+              <div class="panel rc-panel" id="rc-step-1">
+                <div class="rc-panel-head">
+                  <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-folder"/></svg></span>
+                  <div><div class="rc-panel-kicker">第一步</div><h3>选票据目录</h3></div>
+                </div>
                 <div class="rc-row">
                   <input id="browsePath" placeholder="C:\Users\...\Desktop\3.工作\20261008" style="flex:1" />
                   <button class="rc-btn sm" type="button" onclick="RC.browse()">打开</button>
@@ -830,14 +955,19 @@
                 <label>附件与归类预览 <span class="rc-muted">（规则来自 refs/fields.yaml；可逐条改成别的文件夹 —— 例如行程单被规则判进「发票」时要改成「其他相关资料」）</span></label>
                 <div class="rc-dirlist" id="files"></div>
                 <div class="rc-hint">红色的 = 规则完全对不上，必须手工指定；已归类的也可以改。</div>
-                <div class="rc-row" style="margin-top:8px">
+                <div class="rc-panel-actions">
                   <button class="rc-btn primary" type="button" onclick="RC.useBatchDir()">用这个目录</button>
                   <span id="chosenDir" class="rc-muted"></span>
                 </div>
               </div>
 
-              <div class="rc-card">
-                <h2>② 填人工判断项 <span class="rc-muted" style="font-size:12px">（机器抽事实，人写句子与判断）</span></h2>
+              <div class="panel rc-panel" id="rc-step-2">
+                <div class="rc-panel-head">
+                  <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-form"/></svg></span>
+                  <div><div class="rc-panel-kicker">第二步</div><h3>填人工判断项</h3></div>
+                </div>
+                <p class="rc-hint" style="margin:0">机器抽事实，人写句子与判断。这里填错会直接进 OA 单据，所以逐项过一遍。</p>
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg>批次与人员</div>
                 <div class="rc-two">
                   <div><label>批次标识 jobId</label><input id="f_jobId" /></div>
                   <div><label>部门简称</label><input id="f_dept" placeholder="临海" /></div>
@@ -847,14 +977,15 @@
                   <div><label>领导出差</label><select id="f_leader"></select></div>
                   <div><label>出差人员（逗号分隔）</label><input id="f_persons" placeholder="包周艳" /></div>
                 </div>
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-form"/></svg>事由与报销说明</div>
                 <div class="rc-two">
                   <div><label>事由</label><input id="f_reason" placeholder="赴杭州参加培训" /></div>
                   <div><label>报销说明模板</label><input id="f_tpl" value="[{部门简称}]{出差人}{备注}差旅费" /></div>
                 </div>
                 <div class="rc-hint">预览：<b id="memoPreview" class="rc-muted">—</b>　（{备注}/{事由} 取上面的「事由」）</div>
 
-                <label>伙食补助</label>
-                <div class="rc-row">
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg>伙食补助</div>
+                <div class="rc-row" style="margin-top:9px">
                   <label class="rc-inline"><input type="radio" name="meal" value="xlsx" checked onchange="RC.mealMode()"> 目录里有补助表 xlsx（自动读）</label>
                   <label class="rc-inline"><input type="radio" name="meal" value="image" onchange="RC.mealMode()"> 补助表是图片（我填金额）</label>
                   <label class="rc-inline"><input type="radio" name="meal" value="none" onchange="RC.mealMode()"> <b>无伙食补助</b>（培训类常见）</label>
@@ -864,18 +995,20 @@
                   <div><label>金额依据（可追溯）</label><input id="f_mealSrc" placeholder="伙食.jpg 视觉识别 合计160" /></div>
                 </div>
 
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-download"/></svg>收款方</div>
                 <div class="rc-three">
                   <div><label>收款人</label><input id="f_payee" placeholder="包周艳" /></div>
                   <div><label>开户行</label><input id="f_bank" placeholder="中国工商银行…" /></div>
                   <div><label>账号后四位（可空）</label><input id="f_tail" maxlength="4" placeholder="7793" /></div>
                 </div>
 
-                <label>分摊部门 <span class="rc-muted">（规则：出差人所在部门；多人取职级最高者；同级取收款人部门）</span></label>
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-target"/></svg>分摊部门 <span class="rc-muted" style="font-weight:600">规则：出差人所在部门；多人取职级最高者；同级取收款人部门</span></div>
                 <input id="f_allocDept" list="deptHints" placeholder="103310030300 临海_专卖监督管理科（…）" />
                 <datalist id="deptHints"></datalist>
                 <input id="f_allocBasis" placeholder="依据，例如：出差人包周艳所在部门（单人出差）" style="margin-top:6px" />
                 <div class="rc-hint">⚠️ 系统默认按 <b>经办人</b> 部门带出（实测与出差人无关）。留空则不填，复核卡会提示人工确认。填了会联动改「资金使用部门」。</div>
 
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-spark"/></svg>高级选项 <span class="rc-muted" style="font-weight:600">不确定就保持默认</span></div>
                 <div class="rc-two">
                   <div><label>发票上传方式</label>
                     <select id="f_invoice">
@@ -895,31 +1028,36 @@
                   <div id="overrides"></div>
                 </div>
 
-                <div class="rc-sep"></div>
-                <div class="rc-row">
+                <div class="rc-panel-actions">
                   <button class="rc-btn" type="button" onclick="RC.saveConfig()">保存配置</button>
                   <button class="rc-btn primary" type="button" onclick="RC.dryRun()">生成摘要（dry-run）</button>
                   <span id="cfgPath" class="rc-muted"></span>
                 </div>
               </div>
 
-              <div class="rc-card">
-                <h2>③ 核对摘要 → 生成工单</h2>
+              <div class="panel rc-panel" id="rc-step-3">
+                <div class="rc-panel-head">
+                  <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-check"/></svg></span>
+                  <div><div class="rc-panel-kicker">第三步</div><h3>核对摘要 → 生成工单</h3></div>
+                </div>
                 <div class="rc-banner warn">机器只给建议：<b>报销说明的措辞、金额、人数、rowKey</b> 都要你确认。</div>
                 <label class="rc-inline"><input type="checkbox" id="confirmDry"> 我已核对上面的摘要（报销说明 / 人数 / 附件 / 金额来源）</label>
-                <div class="rc-row" style="margin-top:8px">
+                <div class="rc-panel-actions">
                   <button class="rc-btn ok" type="button" id="btnMakeJob" onclick="RC.makeJob()" disabled>生成工单</button>
-                  <button class="rc-btn sm" type="button" onclick="RC.makeJob(true)">生成到自定义文件…</button>
+                  <button class="rc-btn" type="button" onclick="RC.makeJob(true)">生成到自定义文件…</button>
                 </div>
               </div>
             </div>
 
             <!-- ============ 右：执行 / 日志 / 复核 ============ -->
-            <div>
-              <div class="rc-card">
-                <h2>④ 执行</h2>
-                <div class="rc-three">
-                  <div><label>工单</label><select id="f_job"></select></div>
+            <div class="rc-col">
+              <div class="panel rc-panel" id="rc-step-4">
+                <div class="rc-panel-head">
+                  <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-rocket"/></svg></span>
+                  <div><div class="rc-panel-kicker">第四步</div><h3>执行建单</h3></div>
+                </div>
+                <div><label>工单</label><select id="f_job"></select></div>
+                <div class="rc-two" style="margin-top:10px">
                   <div><label>跑到哪里</label>
                     <select id="f_stopAt">
                       <option value="">全程 → 保存草稿（S9）</option>
@@ -934,9 +1072,9 @@
                     </select>
                   </div>
                 </div>
-                <div class="rc-row" style="margin-top:8px">
+                <div class="rc-panel-actions">
                   <button class="rc-btn primary" type="button" onclick="RC.runJob()">开始执行</button>
-                  <button class="rc-btn sm" type="button" onclick="RC.loadJobs(true)">刷新工单列表</button>
+                  <button class="rc-btn" type="button" onclick="RC.loadJobs(true)">刷新工单列表</button>
                   <span class="rc-muted" id="runState"></span>
                 </div>
                 <div class="rc-steps" id="stepBadges"></div>
@@ -945,21 +1083,33 @@
                   副作用提示：S5 及之后会生成一张<b>未保存</b>的单据；只有 S9 才会真正落一张草稿。</div>
               </div>
 
-              <div class="rc-card">
-                <h2>实时日志 <span class="rc-muted" style="font-size:12px" id="logLabel"></span></h2>
-                <div class="rc-log" id="log">（点上面的按钮开始）</div>
-                <div class="rc-row" style="margin-top:6px">
-                  <button class="rc-btn sm" type="button" onclick="RC.copyLog()">复制日志</button>
-                  <button class="rc-btn sm" type="button" onclick="document.getElementById('log').textContent=''">清空</button>
+              <div class="panel rc-panel">
+                <div class="rc-panel-head">
+                  <span class="icon-base rc-icon-info"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-code"/></svg></span>
+                  <div><div class="rc-panel-kicker">实时输出</div><h3>运行日志</h3></div>
+                </div>
+                <div class="rc-console">
+                  <div class="rc-console-bar">
+                    <span class="rc-console-dot" id="rcLogDot"></span>
+                    <span class="rc-console-title" id="logLabel">等待执行</span>
+                    <div class="rc-tools">
+                      <button type="button" onclick="RC.copyLog()">复制</button>
+                      <button type="button" onclick="RC.clearLog()">清空</button>
+                    </div>
+                  </div>
+                  <div class="rc-log" id="log"></div>
                 </div>
               </div>
 
-              <div class="rc-card">
-                <h2>⑤ 复核与交付</h2>
+              <div class="panel rc-panel" id="rc-step-5">
+                <div class="rc-panel-head">
+                  <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg></span>
+                  <div><div class="rc-panel-kicker">第五步</div><h3>复核与交付</h3></div>
+                </div>
                 <div class="rc-row">
                   <select id="f_batch" style="flex:1" onchange="RC.renderBatch()"></select>
-                  <button class="rc-btn sm" type="button" onclick="RC.loadEnv()">刷新</button>
-                  <button class="rc-btn sm" type="button" onclick="RC.makeCard()">生成复核卡</button>
+                  <button class="rc-btn" type="button" onclick="RC.loadEnv()">刷新</button>
+                  <button class="rc-btn" type="button" onclick="RC.makeCard()">生成复核卡</button>
                 </div>
                 <div id="batchDetail"></div>
                 <div class="rc-banner warn" id="submitReminder" style="display:none">
@@ -971,8 +1121,11 @@
                 </div>
               </div>
 
-              <div class="rc-card">
-                <h2>备注 / 踩坑速查 <span class="rc-muted" style="font-size:12px">（不用再去问模型）</span></h2>
+              <div class="panel rc-panel">
+                <div class="rc-panel-head">
+                  <span class="icon-base rc-icon-warn"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-warn"/></svg></span>
+                  <div><div class="rc-panel-kicker">不用再去问模型</div><h3>备注 / 踩坑速查</h3></div>
+                </div>
                 <details><summary>发票必须逐张上传，且上传后要等「采集」完成</summary><div class="rc-muted">一次传多张，系统只登记 1 张 —— 脚本已改成逐张。上传后系统要 OCR+查验，未完成时点「下一步」会被拒：<b>「存在采集中、待人工确认或异常的发票，不允许报销！」</b>；脚本会重试最多 6 分钟，仍失败请到「发票管理 → 待报销票据」处理。</div></details>
                 <details><summary>删掉草稿 ≠ 释放发票</summary><div class="rc-muted">删掉已保存的草稿后再跑，向导树显示 4 份但单据里<b>没有发票</b>（价税合计 0）。必须到「待报销票据」把这批<b>票据本身</b>删掉。判据：上传时<b>不再出现「已存在」</b>才算干净。</div></details>
                 <details><summary>分摊部门默认是「经办人」的部门</summary><div class="rc-muted">与出差人无关。规则：出差人所在部门 / 多人取职级最高者 / 同级取收款人部门。填了「分摊部门」会联动改「资金使用部门」。</div></details>
@@ -983,10 +1136,17 @@
             </div>
           </div>
 
-          <div class="rc-card">
-            <h2>批次历史</h2>
-            <table><thead><tr><th>批次</th><th>单据号</th><th>金额</th><th>状态</th><th>步骤</th><th>审计</th><th>时间</th><th>操作</th></tr></thead>
-            <tbody id="history"></tbody></table>
+          <div class="panel rc-panel rc-history">
+            <div class="rc-panel-head">
+              <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-check"/></svg></span>
+              <div><div class="rc-panel-kicker">全部批次</div><h3>批次历史</h3></div>
+            </div>
+            <div class="rc-tablewrap">
+              <table>
+                <thead><tr><th>批次</th><th>单据号</th><th>金额</th><th>状态</th><th>步骤</th><th>点击审计</th><th>时间</th><th>操作</th></tr></thead>
+                <tbody id="history"></tbody>
+              </table>
+            </div>
           </div>
 
         </div>
@@ -1713,6 +1873,32 @@
   }
   RC.toast = toast;
 
+  /* ── 流程轨 / 日志状态点：纯外观，不参与执行逻辑 ────────────── */
+  function logDot(state) {
+    var d = $('rcLogDot');
+    if (d) d.className = 'rc-console-dot' + (state ? ' ' + state : '');
+  }
+  function railSet(step) {
+    [].forEach.call(document.querySelectorAll('.rc-rail-item'), function (it) {
+      it.classList.toggle('active', it.getAttribute('data-rc-goto') === 'rc-step-' + step);
+    });
+  }
+  /** 出过草稿 → 说明前四步都走通了，轨上打勾。
+   *  第 5 步（复核交付）故意不打勾：草稿还没提交，那一步永远是人来收尾的。 */
+  function railMarks() {
+    var hasDraft = ((ENV && ENV.batches) || []).some(function (b) { return !!b.billNo; });
+    [].forEach.call(document.querySelectorAll('.rc-rail-item'), function (it) {
+      var n = Number(String(it.getAttribute('data-rc-goto')).replace('rc-step-', ''));
+      it.classList.toggle('done', hasDraft && n <= 4);
+    });
+  }
+  RC.clearLog = function () {
+    var l = $('log'); if (l) l.textContent = '';
+    logDot('');
+    var lb = $('logLabel'); if (lb) lb.textContent = '等待执行';
+    var rs = $('runState'); if (rs) rs.textContent = '';
+  };
+
   async function api(p, opts) {
     var r = await fetch(p, opts);
     var ct = r.headers.get('content-type') || '';
@@ -1814,6 +2000,7 @@
       $('deptHints').innerHTML = (ENV.deptSuggestions || []).map(function (d) { return '<option value="' + esc(d) + '">'; }).join('');
       renderHistory(); loadJobs(); loadBatches(); loadConfigs();
       if (!CHOSEN) $('browsePath').value = ENV.defaultBrowseRoot;
+      railMarks();
     } catch (e) {
       var offline = e.status === 502 || (e.payload && e.payload.reason === 'upstream_unreachable');
       chips.innerHTML = '<span class="rc-chip bad">' + (offline ? '操作台服务未启动' : '连不上本地服务') + '</span>';
@@ -2025,6 +2212,8 @@
     if (CUR_RUN) { try { CUR_RUN.close(); } catch (e) { } }
     var log = $('log'); log.textContent = '';
     $('logLabel').textContent = '· ' + cmd;
+    logDot('live');
+    railSet(4);
     var es = new EventSource(RC_API + '/run?runId=' + encodeURIComponent(runId));
     CUR_RUN = es;
     $('stepBadges').innerHTML = '';
@@ -2038,10 +2227,14 @@
       var d = JSON.parse(ev.data);
       appendLog('\n── 结束：' + (d.status === 'ok' ? '成功（退出码 0）' : '失败') + (d.note ? ' · ' + d.note : '') + '\n');
       $('runState').textContent = d.status === 'ok' ? '上次：成功' : '上次：失败（' + d.code + '）';
+      logDot(d.status === 'ok' ? '' : 'err');
       es.close(); CUR_RUN = null;
       loadEnv();
     });
-    es.onerror = function () { appendLog('\n[日志流断开 —— 服务可能已停止]\n'); es.close(); CUR_RUN = null; };
+    es.onerror = function () {
+      appendLog('\n[日志流断开 —— 服务可能已停止]\n');
+      logDot('err'); es.close(); CUR_RUN = null;
+    };
   }
   function appendLog(t) {
     var log = $('log');
@@ -2116,6 +2309,17 @@
     $('submitReminder').style.display = b.billNo ? 'block' : 'none';
   }
   RC.renderBatch = renderBatch;
+
+  /* ── 流程轨：点一步就跳到那一步的面板 ───────────────────────── */
+  var rail = $('rcRail');
+  if (rail) rail.addEventListener('click', function (ev) {
+    var it = ev.target.closest ? ev.target.closest('.rc-rail-item') : null;
+    if (!it) return;
+    var id = String(it.getAttribute('data-rc-goto') || '');
+    var el = $(id);
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    railSet(id.replace('rc-step-', ''));
+  });
 
   /* ── 懒初始化：第一次切到这个栏目时才连服务（并自动把它拉起来）── */
   var section = document.querySelector('[data-section="reimburse"]');
