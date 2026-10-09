@@ -966,10 +966,9 @@
 
           <ol class="rc-rail" id="rcRail" aria-label="操作台流程">
             <li class="rc-rail-item" data-rc-goto="rc-step-1"><span class="rc-rail-no"><em>1</em></span><span>选票据目录</span></li>
-            <li class="rc-rail-item" data-rc-goto="rc-step-2"><span class="rc-rail-no"><em>2</em></span><span>填人工判断</span></li>
-            <li class="rc-rail-item" data-rc-goto="rc-step-3"><span class="rc-rail-no"><em>3</em></span><span>核对摘要</span></li>
+            <li class="rc-rail-item" data-rc-goto="rc-step-2"><span class="rc-rail-no"><em>2</em></span><span>AI 预处理</span></li>
+            <li class="rc-rail-item" data-rc-goto="rc-step-3"><span class="rc-rail-no"><em>3</em></span><span>确认工单</span></li>
             <li class="rc-rail-item" data-rc-goto="rc-step-4"><span class="rc-rail-no"><em>4</em></span><span>执行建单</span></li>
-            <li class="rc-rail-item" data-rc-goto="rc-step-5"><span class="rc-rail-no"><em>5</em></span><span>复核交付</span></li>
           </ol>
 
           <div class="rc-layout">
@@ -1000,24 +999,27 @@
               <div class="panel rc-panel" id="rc-step-2">
                 <div class="rc-panel-head">
                   <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-form"/></svg></span>
-                  <div><div class="rc-panel-kicker">第二步</div><h3>填人工判断项</h3></div>
+                  <div><div class="rc-panel-kicker">第二步</div><h3>AI 预处理 → 核对表单</h3></div>
                 </div>
-                <p class="rc-hint" style="margin:0">机器抽事实，人写句子与判断。这里填错会直接进 OA 单据，所以逐项过一遍。</p>
+                <p class="rc-hint" style="margin:0">AI 把附件读一遍并填好下面这些；<b>填错会直接进 OA 单据</b>，所以逐项过一遍。不想用 AI 也可以全部手填。</p>
 
-                <!-- 读补助表预填：只读接口，只填「事实」三类，不碰措辞/部门/收款 -->
+                <!-- AI 预处理：读附件内容 → 归类 → 出工单草案（慢，进度看右侧运行日志） -->
                 <div class="rc-prefill">
                   <div class="rc-prefill-copy">
-                    <b>先让机器把事实填了</b>
-                    <div class="rc-hint">目录里若有「伙食补贴申请表」xlsx，<b>出差人 / 事由 / 伙食费</b>能直接读出来 —— 这三项是事实，不用手打。读不出会明确告诉你为什么。</div>
+                    <b>AI 预处理：读附件内容 → 归类 → 生成工单草案</b>
+                    <div class="rc-hint">把目录里每个票据渲染成图交给大模型判该进哪个文件夹，同时把工单该填的填好。<b>规则有把握的不问 AI</b>（省钱省时间），拿不准的才问 —— 约 1–3 分钟，进度看右侧「运行日志」。</div>
+                    <div class="rc-row" style="margin-top:9px">
+                      <button class="rc-btn primary" type="button" onclick="RC.agentPrefill()">AI 预处理</button>
+                      <button class="rc-btn" type="button" onclick="RC.prefillMeal()">只读补助表预填</button>
+                    </div>
                   </div>
-                  <button class="rc-btn" type="button" onclick="RC.prefillMeal()">读补助表预填</button>
                 </div>
                 <div id="prefillOut"></div>
 
                 <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-hub"/></svg>批次与人员</div>
                 <div class="rc-two">
                   <div><label>批次标识 jobId</label><input id="f_jobId" /></div>
-                  <div><label>部门简称</label><input id="f_dept" placeholder="临海" /></div>
+                  <div><label>部门简称（固定）</label><input id="f_dept" value="临海" readonly title="按用户 2026-10-08 指示固定为「临海」" /></div>
                 </div>
                 <div class="rc-three">
                   <div><label>出差类型</label><select id="f_travelType"></select></div>
@@ -1049,11 +1051,9 @@
                   <div><label>账号后四位（可空）</label><input id="f_tail" maxlength="4" placeholder="7793" /></div>
                 </div>
 
-                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-target"/></svg>分摊部门 <span class="rc-muted" style="font-weight:600">规则：出差人所在部门；多人取职级最高者；同级取收款人部门</span></div>
-                <input id="f_allocDept" list="deptHints" placeholder="103310030300 临海_专卖监督管理科（…）" />
-                <datalist id="deptHints"></datalist>
-                <input id="f_allocBasis" placeholder="依据，例如：出差人包周艳所在部门（单人出差）" style="margin-top:6px" />
-                <div class="rc-hint">⚠️ 系统默认按 <b>经办人</b> 部门带出（实测与出差人无关）。留空则不填，复核卡会提示人工确认。填了会联动改「资金使用部门」。</div>
+                <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-target"/></svg>分摊部门 <span class="rc-muted" style="font-weight:600">已按 2026-10-08 指示省略</span></div>
+                <div class="rc-hint">这一项<b>不填</b> —— 走系统默认（按经办人部门带出）。原规则「= 出差人所在部门 / 多人取职级最高者」暂缓，优先跑通流程。<br>
+                  想恢复时：在工单配置里加 <code>"分摊部门": { "值": "...", "依据": "..." }</code>，runner 会自动把它写进明细。</div>
 
                 <div class="rc-sub-head"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-spark"/></svg>高级选项 <span class="rc-muted" style="font-weight:600">不确定就保持默认</span></div>
                 <div class="rc-two">
@@ -1085,7 +1085,7 @@
               <div class="panel rc-panel" id="rc-step-3">
                 <div class="rc-panel-head">
                   <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-check"/></svg></span>
-                  <div><div class="rc-panel-kicker">第三步</div><h3>核对摘要 → 生成工单</h3></div>
+                  <div><div class="rc-panel-kicker">第三步</div><h3>确认工单</h3></div>
                 </div>
                 <div class="rc-banner warn">机器只给建议：<b>报销说明的措辞、金额、人数、rowKey</b> 都要你确认。</div>
                 <label class="rc-inline"><input type="checkbox" id="confirmDry"> 我已核对上面的摘要（报销说明 / 人数 / 附件 / 金额来源）</label>
@@ -1126,10 +1126,10 @@
                   副作用提示：S5 及之后会生成一张<b>未保存</b>的单据；只有 S9 才会真正落一张草稿。</div>
               </div>
 
-              <div class="panel rc-panel" id="rc-step-5">
+              <div class="panel rc-panel" id="rc-result">
                 <div class="rc-panel-head">
                   <span class="icon-base"><svg viewBox="0 0 24 24" class="app-icon" aria-hidden="true"><use href="#i-receipt"/></svg></span>
-                  <div><div class="rc-panel-kicker">第五步</div><h3>复核与交付</h3></div>
+                  <div><div class="rc-panel-kicker">跑完自动出现 · 不是你要做的一步</div><h3>运行结果与复核</h3></div>
                 </div>
                 <div class="rc-row">
                   <select id="f_batch" style="flex:1" onchange="RC.renderBatch()"></select>
@@ -2053,7 +2053,7 @@
       redline.innerHTML = '红线：<b>只填不提交</b> · 写入白名单只有 <b>' + esc(((ENV.truth || {}).allowedFillColumns || []).join(' / ')) + '</b> · <b>金额一律不碰</b>（系统从发票自动录入） · 保存草稿后由<b>你本人</b>去 OA 点提交';
       fillSelect($('f_travelType'), optsFrom(ENV.truth && ENV.truth.judgement, '出差类型') || ['公务出差', '党务工作']);
       fillSelect($('f_leader'), ['普通员工', '部门主要负责人', '分管领导', '主要领导']);
-      $('deptHints').innerHTML = (ENV.deptSuggestions || []).map(function (d) { return '<option value="' + esc(d) + '">'; }).join('');
+      // 分摊部门已按指示省略（2026-10-08），页面上不再有该项，故不再渲染部门候选
       renderHistory(); loadJobs(); loadBatches(); loadConfigs();
       if (!CHOSEN) $('browsePath').value = ENV.defaultBrowseRoot;
       railMarks();
@@ -2219,6 +2219,89 @@
       + '</div>';
     toast('已按补助表预填：出差人 / 事由 / 伙食档位', 'ok');
   };
+
+  /* ── AI 预处理：读附件内容 → 归类 → 出工单草案 ─────────────────────
+     走技能的 agent-prefill（规则先跑，拿不准的才调视觉大模型）。
+     慢（1–3 分钟）→ 复用右侧「运行日志」实时看进度，不另造 UI。
+     完成后把草案回填进下面的表单 —— 你只要确认或微调，然后照常「生成工单」→「开始执行」。 */
+  RC.agentPrefill = function () {
+    if (!CHOSEN) { toast('先在①里选票据目录（点「用这个目录」）', 'bad'); return; }
+    var jobId = ($('f_jobId').value || '').trim()
+      || (new Date().toISOString().slice(0, 10) + '-' + CHOSEN.split(/[\\/]/).pop());
+    $('f_jobId').value = jobId;
+    $('prefillOut').innerHTML = '<div class="rc-hint" style="margin-top:10px">AI 预处理中…（进度看右侧「运行日志」，约 1–3 分钟）</div>';
+    railSet(2);
+    exec('agent-prefill', { batchDir: CHOSEN, jobId: jobId }, function (d) {
+      if (d && d.status === 'ok') loadDraft(jobId);
+      else $('prefillOut').innerHTML = '<div class="rc-banner warn" style="margin-top:10px">AI 预处理失败（退出码 '
+        + (d && d.code) + '）—— 看右侧日志定位；也可以展开最下面的「手工填写」自己填</div>';
+    });
+  };
+
+  /** 读回草案 → 回填表单 + 渲染「AI 决策」审查表 */
+  async function loadDraft(jobId) {
+    $('prefillOut').innerHTML = '<div class="rc-hint" style="margin-top:10px">读取草案…</div>';
+    var r;
+    try {
+      r = await api(RC_API + '/exec', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cmd: 'read-prefill', args: { jobId: jobId } })
+      });
+    } catch (e) {
+      $('prefillOut').innerHTML = '<div class="rc-banner warn" style="margin-top:10px">读草案失败：' + esc(e.message) + '</div>';
+      return;
+    }
+    if (!r || !r.draft) {
+      $('prefillOut').innerHTML = '<div class="rc-banner warn" style="margin-top:10px">没读到草案</div>';
+      return;
+    }
+    var d = r.draft, c = d.config || {};
+
+    // ── 回填表单（全部可改；这只是把 AI 的结论放到你顺手的位置）──
+    if (c['出差人员'] && c['出差人员'].length) $('f_persons').value = c['出差人员'].join('，');
+    if (c['事由']) $('f_reason').value = c['事由'];
+    var pay = c['收款方'] || {};
+    if (pay['姓名']) $('f_payee').value = pay['姓名'];
+    if (pay['开户行']) $('f_bank').value = pay['开户行'];
+    if (pay['账号后四位']) $('f_tail').value = pay['账号后四位'];
+    var loc = c['明细定位'] || {};
+    if (loc.rowKeys && loc.rowKeys.length) $('f_rowKeys').value = loc.rowKeys.join(', ');
+    // ★ 只有 fillKeys 恰好是 ['报销说明'] 才勾「只填报销说明」——
+    //   勾了就等于把「伙食费」踢出填写列（那正是之前踩的坑）
+    $('f_onlyMemo').checked = !!loc.fillKeys && loc.fillKeys.join(',') === '报销说明';
+    var radio = document.querySelector('input[name=meal][value="' + (c['无伙食补助'] ? 'none' : (d.meal && d.meal.mode === 'image' ? 'image' : 'xlsx')) + '"]');
+    if (radio) { radio.checked = true; RC.mealMode(); }
+    // AI 改过归类的文件 → 同步到①里的下拉（你还想改就直接改下拉）
+    var ov = c.folderOverrides || {};
+    [].forEach.call(document.querySelectorAll('.ovSel'), function (s) {
+      if (ov[s.dataset.file]) s.value = ov[s.dataset.file];
+    });
+    if (typeof syncOverrides === 'function') syncOverrides();
+    var mp = $('memoPreview'); if (mp) mp.textContent = memoText() || '—';
+
+    $('prefillOut').innerHTML = renderDraft(d);
+    toast('AI 预处理完成：附件归类 + 工单草案已填好，请核对后生成工单', 'ok');
+  }
+
+  function renderDraft(d) {
+    var att = d.attachments || [];
+    var byAi = att.filter(function (a) { return a.by === 'ai'; }).length;
+    var rows = att.map(function (a) {
+      var how = a.by === 'ai'
+        ? '<span class="rc-tag f-other">AI 改判</span> ' + esc(a.docType || '') + '（置信 ' + esc(a.confidence) + '）'
+        : '<span class="rc-muted">规则</span> ' + esc(a.how || '');
+      return '<tr><td>' + esc(a.file) + '</td><td>' + esc(a.folder) + '</td><td style="font-size:11.5px">' + how + '</td></tr>';
+    }).join('');
+    var notes = (d.assumptions || []).map(function (x) { return '<div class="rc-hint">· ' + esc(x) + '</div>'; }).join('');
+    return '<div class="rc-readout">'
+      + '<b>AI 预处理结果</b><span class="rc-muted">　附件 ' + att.length + ' 个 · AI 改判 ' + byAi + ' 个'
+      + (d.aiModel ? ' · 模型 ' + esc(d.aiModel) : ' · 未调模型') + '</span>'
+      + '<div class="rc-tablewrap" style="margin-top:10px"><table style="min-width:0">'
+      + '<thead><tr><th>附件</th><th>判归</th><th>依据</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + (notes ? '<div style="margin-top:9px"><b style="font-size:12px">需要你核一眼的假设</b>' + notes + '</div>' : '')
+      + '<div class="rc-hint" style="margin-top:9px">下面表单已按此填好，<b>都可以改</b>；确认无误就到③点「生成工单」。</div>'
+      + '</div>';
+  }
   function memoText() {
     var tpl = $('f_tpl').value || '[{部门简称}]{出差人}{备注}差旅费';
     var persons = splitList($('f_persons').value);
@@ -2251,8 +2334,8 @@
     if ($('f_bank').value.trim()) payee['开户行'] = $('f_bank').value.trim();
     if ($('f_tail').value.trim()) payee['账号后四位'] = $('f_tail').value.trim();
     cfg['收款方'] = payee;
-    var dept = $('f_allocDept').value.trim();
-    if (dept) cfg['分摊部门'] = { 值: dept, 依据: $('f_allocBasis').value.trim() || '(未注明依据)' };
+    // 分摊部门：2026-10-08 用户指示省略 —— 不写该字段，走系统默认（经办人部门）。
+    // 想恢复：在这里填 cfg['分摊部门'] = { 值, 依据 } 即可（runner 会自动写进明细）。
     if (keys.length === 1) cfg['明细定位'] = { rowKey: keys[0] };
     else if (keys.length > 1) cfg['明细定位'] = { rowKeys: keys };
     if ($('f_onlyMemo').checked && cfg['明细定位']) cfg['明细定位'].fillKeys = ['报销说明'];
@@ -2299,7 +2382,7 @@
   $('confirmDry').addEventListener('change', function (e) { $('btnMakeJob').disabled = !e.target.checked; });
 
   /* ── 执行与日志（SSE）──────────────────────────────────────── */
-  async function exec(cmd, args) {
+  async function exec(cmd, args, onEnd) {
     args = args || {};
     try {
       var r = await api(RC_API + '/exec', {
@@ -2307,39 +2390,60 @@
         body: JSON.stringify({ cmd: cmd, args: args })
       });
       if (!r.runId) throw new Error(r.error || '没有 runId');
-      openStream(r.runId, cmd);
+      openStream(r.runId, cmd, onEnd);
       return r.runId;
     } catch (e) { toast('启动失败：' + e.message, 'bad'); return null; }
   }
   RC.exec = exec;
-  function openStream(runId, cmd) {
+  /* 日志流：走 /run-poll **轮询**，不用 EventSource。
+     ★ 原因（实测）：页面是经 Rust 反代访问技能的，而 tiny_http 对 chunked 流式响应会攒着不发
+       —— agent-prefill 跑 27s，SSE 的响应头也在 27s 才到，页面等于全程看不到进度。
+       直连 8790 时 SSE 是好的（33ms 连上、事件分散 35.8s 到达），所以 SSE 留给独立操作台页面，
+       这里改用按需拉取：每次请求都很短，不触发那个缓冲行为。 */
+  function openStream(runId, cmd, onEnd) {
     if (CUR_RUN) { try { CUR_RUN.close(); } catch (e) { } }
     var log = $('log'); log.textContent = '';
     $('logLabel').textContent = '· ' + cmd;
     logDot('live');
     railSet(4);
     revealLog();
-    var es = new EventSource(RC_API + '/run?runId=' + encodeURIComponent(runId));
-    CUR_RUN = es;
     $('stepBadges').innerHTML = '';
-    es.addEventListener('meta', function (ev) {
-      var m = JSON.parse(ev.data);
-      $('logLabel').textContent = '· ' + m.label + ' · ' + m.cmd;
-      $('runState').textContent = '运行中…';
-    });
-    es.onmessage = function (ev) { var d = JSON.parse(ev.data); appendLog(d.t); };
-    es.addEventListener('end', function (ev) {
-      var d = JSON.parse(ev.data);
+
+    var from = 0, stopped = false, fails = 0;
+    CUR_RUN = { close: function () { stopped = true; } };
+
+    function finish(d) {
       appendLog('\n── 结束：' + (d.status === 'ok' ? '成功（退出码 0）' : '失败') + (d.note ? ' · ' + d.note : '') + '\n');
       $('runState').textContent = d.status === 'ok' ? '上次：成功' : '上次：失败（' + d.code + '）';
       logDot(d.status === 'ok' ? '' : 'err');
-      es.close(); CUR_RUN = null;
+      stopped = true; CUR_RUN = null;
       loadEnv();
-    });
-    es.onerror = function () {
-      appendLog('\n[日志流断开 —— 服务可能已停止]\n');
-      logDot('err'); es.close(); CUR_RUN = null;
-    };
+      if (typeof onEnd === 'function') {
+        try { onEnd(d); } catch (e) { appendLog('\n[回调出错] ' + e.message + '\n'); }
+      }
+    }
+
+    function tick() {
+      if (stopped) return;
+      api(RC_API + '/run-poll?runId=' + encodeURIComponent(runId) + '&from=' + from)
+        .then(function (d) {
+          fails = 0;
+          if (d.label) $('logLabel').textContent = '· ' + d.label + ' · ' + (d.cmd || cmd);
+          for (var i = 0; i < d.chunks.length; i++) appendLog(d.chunks[i]);
+          from = d.total;
+          if (d.status === 'running') { $('runState').textContent = '运行中…'; setTimeout(tick, 600); return; }
+          finish(d);
+        })
+        .catch(function () {
+          fails++;
+          if (fails > 5) {
+            appendLog('\n[日志轮询连续失败 —— 服务可能已停止]\n');
+            logDot('err'); stopped = true; CUR_RUN = null; return;
+          }
+          setTimeout(tick, 1500);
+        });
+    }
+    tick();
   }
   function appendLog(t) {
     var log = $('log');

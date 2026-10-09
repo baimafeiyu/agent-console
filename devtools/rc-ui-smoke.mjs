@@ -15,7 +15,10 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
-const URL = process.argv[2] || 'http://127.0.0.1:8766';
+// 位置参数是 URL，`--xxx` 是开关 —— 别把开关当 URL（踩过：--deep 被拿去 navigate）
+const POSITIONAL = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const URL = POSITIONAL[0] || 'http://127.0.0.1:8766';
+const DEEP = process.argv.includes('--deep');
 const SHOT = path.join(HERE, 'preview-rc-section.png');
 
 const cfgPath = path.join(ROOT, 'reimburse.json');
@@ -118,7 +121,7 @@ try {
   console.log('  截图 → ' + SHOT);
 
   console.log('=== 9. 界面结构（步骤顺序 / 流程轨 / 深色终端）===');
-  ok(await page.locator('.rc-rail-item').count() === 5, '流程轨 5 步');
+  ok(await page.locator('.rc-rail-item').count() === 4, '流程轨 4 步（2026-10-08：去掉「复核交付」独立步骤）');
   ok(await page.locator('.rc-panel').count() >= 8, '面板数 ' + await page.locator('.rc-panel').count());
   // ★ 核心：①→⑤ 必须落在同一列里、且按顺序 —— 之前把 ①②③ 放左栏、④⑤ 放右栏，
   //   读完左栏底的「第三步」要跳回右上角找「第四步」，这是硬伤，必须锁死。
@@ -130,9 +133,12 @@ try {
     const numberedInRail = [...document.querySelector('.rc-rail-col').querySelectorAll('[id^="rc-step-"]')].length;
     return { ids, cols, sticky: rail.position, numberedInRail };
   });
-  ok(layout.ids.join(',') === 'rc-step-1,rc-step-2,rc-step-3,rc-step-4,rc-step-5',
-    '①→⑤ 同列且严格按序：' + layout.ids.join(' → '));
+  ok(layout.ids.join(',') === 'rc-step-1,rc-step-2,rc-step-3,rc-step-4',
+    '①→④ 同列且严格按序：' + layout.ids.join(' → '));
   ok(layout.numberedInRail === 0, '右侧栏里没有任何「编号步骤」（编号不许跨栏）');
+  // 「运行结果」不是第 5 步 —— 跑完自动出现，不该带编号（2026-10-08 用户指示）
+  ok(await page.locator('#rc-result').count() === 1 && (await page.locator('#rc-step-5').count()) === 0,
+    '运行结果是无编号面板（不存在第 5 步）');
   ok(layout.cols === 2 && layout.sticky === 'sticky',
     `宽屏 = 主内容列 + 吸顶侧栏（列 ${layout.cols} / 侧栏 ${layout.sticky}）`);
   await page.locator('.rc-rail-item').nth(1).click();
@@ -220,7 +226,7 @@ try {
         text: o.innerText.replace(/\s+/g, ' ').slice(0, 180),
         hasSource: /出处/.test(o.innerText),
         // 红线：这几项一个都不该被预填
-        alloc: document.getElementById('f_allocDept').value,
+        allocGone: document.getElementById('f_allocDept') === null,
         payee: document.getElementById('f_payee').value,
         bank: document.getElementById('f_bank').value,
         tail: document.getElementById('f_tail').value,
@@ -231,8 +237,65 @@ try {
     ok(pf.reason.length > 0, '事由已预填：' + pf.reason);
     ok(pf.meal === 'xlsx', '伙食档位自动切到「目录里有补助表 xlsx」');
     ok(pf.hasSource, '读出来的值都带「出处」');
-    ok(!pf.alloc && !pf.payee && !pf.bank && !pf.tail,
-      '★ 红线守住：分摊部门/收款人/开户行/尾号 一个都没被预填');
+    ok(pf.allocGone, '分摊部门字段已移除（2026-10-08 指示：该规则省略）');
+    ok(!pf.payee && !pf.bank && !pf.tail,
+      '★ 红线守住：收款人 / 开户行 / 尾号 没被预填');
+  }
+
+  // ── 可选深测：真跑一次 AI 预处理（1–3 分钟，会调用视觉模型）──
+  // 默认跳过，用 `node devtools/rc-ui-smoke.mjs --deep` 才跑，免得拖慢日常回归。
+  if (DEEP) {
+    console.log('=== 12b. AI 预处理端到端（--deep，会调视觉模型）===');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-target="reimburse"]').first().click();
+    await page.waitForTimeout(1500);
+    await page.fill('#browsePath', mealDir);
+    await page.locator('button:has-text("打开")').first().click();
+    await page.waitForTimeout(1500);
+    await page.locator('button:has-text("用这个目录")').click();
+    await page.fill('#f_persons', '');
+    await page.fill('#f_reason', '');
+    await page.fill('#f_rowKeys', '');
+    await page.fill('#f_payee', '');
+    await page.locator('button:has-text("AI 预处理")').click();
+    await page.waitForFunction(() => /rc-readout/.test(document.getElementById('prefillOut').innerHTML),
+      { timeout: 300000 }).catch(() => {});
+    const ai = await page.evaluate(() => {
+      const o = document.getElementById('prefillOut');
+      return {
+        text: o.innerText.replace(/\s+/g, ' ').slice(0, 260),
+        ok: /AI 预处理结果/.test(o.innerText),
+        persons: document.getElementById('f_persons').value,
+        reason: document.getElementById('f_reason').value,
+        rowKeys: document.getElementById('f_rowKeys').value,
+        payee: document.getElementById('f_payee').value,
+        jobId: document.getElementById('f_jobId').value,
+        dept: document.getElementById('f_dept').value,
+        runState: document.getElementById('runState').textContent,
+        logLen: document.getElementById('log').textContent.length,
+        logTail: document.getElementById('log').textContent.replace(/\s+/g, ' ').slice(-120),
+        chosen: document.getElementById('chosenDir').textContent,
+      };
+    });
+    console.log('  ' + ai.text);
+    if (!ai.ok) {
+      // 失败时把现场打出来，别只报一句"没渲染"
+      console.log('  ── 诊断 ──');
+      console.log('    runState : ' + ai.runState);
+      console.log('    logLen   : ' + ai.logLen);
+      console.log('    logTail  : ' + ai.logTail);
+      console.log('    chosen   : ' + ai.chosen);
+    }
+    ok(ai.ok, '草案面板已渲染');
+    ok(ai.persons.length > 0, 'AI 把出差人填好了：' + ai.persons);
+    ok(ai.reason.length > 0, 'AI 把事由填好了：' + ai.reason);
+    ok(/vstartplace=/.test(ai.rowKeys), 'AI 推出了明细定位：' + ai.rowKeys);
+    ok(ai.dept === '临海', '部门简称固定 临海');
+    ok(ai.jobId.length > 0, '批次号已生成：' + ai.jobId);
+  } else {
+    console.log('=== 12b. AI 预处理端到端 ===');
+    console.log('  ⏭  跳过（加 --deep 才跑：会调用视觉模型，约 1–3 分钟）');
   }
 
   console.log('=== 13. 控制台 / 网络 ===');
