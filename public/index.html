@@ -2434,13 +2434,16 @@
           if (d.status === 'running') { $('runState').textContent = '运行中…'; setTimeout(tick, 600); return; }
           finish(d);
         })
-        .catch(function () {
+        .catch(function (e) {
+          // 别把错误吞掉 —— 轮询失败时把原因写进日志，否则页面只会永远停在「运行中…」，
+          // 排障的人（和下一个人）根本不知道是 404 还是网络断了。
           fails++;
-          if (fails > 5) {
-            appendLog('\n[日志轮询连续失败 —— 服务可能已停止]\n');
+          appendLog((fails === 1 ? '\n' : '') + '[日志轮询失败 #' + fails + '] ' + (e && e.message ? e.message : e) + '\n');
+          if (fails > 15) {
+            appendLog('[日志轮询连续失败，已放弃]\n');
             logDot('err'); stopped = true; CUR_RUN = null; return;
           }
-          setTimeout(tick, 1500);
+          setTimeout(tick, 1200);
         });
     }
     tick();
